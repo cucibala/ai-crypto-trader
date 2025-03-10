@@ -175,6 +175,15 @@ NOTIFICATION = {
     }
 }
 
+# API密钥配置
+API_KEYS = {
+    'openai': _get_env_var('OPENAI_API_KEY'),
+    'news': _get_env_var('NEWS_API_KEY', required=False),
+    'twitter': _get_env_var('TWITTER_API_KEY', required=False),
+    'reddit': _get_env_var('REDDIT_API_KEY', required=False),
+    'telegram': _get_env_var('TELEGRAM_API_KEY', required=False)
+}
+
 # 验证配置
 def validate_config():
     """

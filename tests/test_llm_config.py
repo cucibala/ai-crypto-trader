@@ -34,7 +34,7 @@ class TestLLMConfig(unittest.TestCase):
         """测试OpenAI API连接"""
         try:
             # 配置OpenAI客户端
-            base_url = self.openai_config['base_url'] if self.openai_config['base_url'] else "https://api.openai.com/v1"
+            base_url = self.proxy_config['url'] if self.proxy_config['url'] else "https://api.openai.com/v1"
             client = OpenAI(
                 api_key=self.openai_config['api_key'],
                 base_url=base_url,
