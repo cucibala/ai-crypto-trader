@@ -102,9 +102,36 @@ LOG_CONFIG = {
 
 # AI模型配置
 MODEL_CONFIG = {
-    'model': _get_env_var('OPENAI_MODEL', 'gpt-4-turbo-preview'),
-    'temperature': float(_get_env_var('OPENAI_TEMPERATURE', '0.7')),
-    'max_tokens': int(_get_env_var('OPENAI_MAX_TOKENS', '2000')),
+    # OpenAI配置
+    'openai': {
+        'api_key': _get_env_var('OPENAI_API_KEY'),
+        'model': _get_env_var('OPENAI_MODEL', 'gpt-4-turbo-preview'),
+        'temperature': float(_get_env_var('OPENAI_TEMPERATURE', '0.7')),
+        'max_tokens': int(_get_env_var('OPENAI_MAX_TOKENS', '2000')),
+        'base_url': _get_env_var('OPENAI_BASE_URL', 'https://api.deepseek.com', required=True),
+        'org_id': _get_env_var('OPENAI_ORG_ID', required=False),
+        'request_timeout': int(_get_env_var('OPENAI_REQUEST_TIMEOUT', '30')),
+        'max_retries': int(_get_env_var('OPENAI_MAX_RETRIES', '3')),
+        'retry_interval': int(_get_env_var('OPENAI_RETRY_INTERVAL', '1'))
+    },
+    
+    # Anthropic配置（备选模型）
+    'anthropic': {
+        'api_key': _get_env_var('ANTHROPIC_API_KEY', required=False),
+        'model': _get_env_var('ANTHROPIC_MODEL', 'claude-3-opus', required=False)
+    },
+    
+    # Google AI配置（备选模型）
+    'google': {
+        'api_key': _get_env_var('GOOGLE_AI_API_KEY', required=False),
+        'model': _get_env_var('GOOGLE_AI_MODEL', 'gemini-pro', required=False)
+    },
+    
+    # 代理配置
+    'proxy': {
+        'url': _get_env_var('LLM_PROXY_URL', required=False),
+        'key': _get_env_var('LLM_PROXY_KEY', required=False)
+    }
 }
 
 # 风险管理配置
@@ -154,12 +181,23 @@ def validate_config():
     验证配置是否完整
     """
     required_configs = [
-        ("OpenAI API密钥", OPENAI_API_KEY),
+        ("OpenAI API密钥", MODEL_CONFIG['openai']['api_key']),
         ("数据库用户名", _get_env_var('DB_USER')),
         ("数据库密码", _get_env_var('DB_PASSWORD')),
         ("Binance API密钥", BINANCE_API_KEY),
         ("Binance API密钥", BINANCE_API_SECRET)
     ]
+    
+    # 验证备选模型配置的完整性
+    if MODEL_CONFIG['anthropic']['api_key']:
+        required_configs.append(("Anthropic模型名称", MODEL_CONFIG['anthropic']['model']))
+    
+    if MODEL_CONFIG['google']['api_key']:
+        required_configs.append(("Google AI模型名称", MODEL_CONFIG['google']['model']))
+    
+    # 验证代理配置的完整性
+    if MODEL_CONFIG['proxy']['url']:
+        required_configs.append(("大模型代理密钥", MODEL_CONFIG['proxy']['key']))
     
     missing_configs = []
     for name, value in required_configs:

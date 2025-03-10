@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 from textblob import TextBlob
-import openai
+from openai import OpenAI
 from config.settings import MODEL_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -20,16 +20,19 @@ class SentimentAnalyzer:
     4. 市场深度情绪
     """
     
-    def __init__(self, api_key: str):
+    def __init__(self):
         """
         初始化情绪分析器
-        
-        Args:
-            api_key: OpenAI API密钥
         """
-        self.api_key = api_key
-        openai.api_key = api_key
         self.model_config = MODEL_CONFIG
+        
+        # 初始化OpenAI客户端
+        base_url = MODEL_CONFIG['proxy']['url'] if MODEL_CONFIG['proxy']['url'] else "https://api.openai.com/v1"
+        self.client = OpenAI(
+            api_key=MODEL_CONFIG['openai']['api_key'],
+            base_url=base_url,
+            organization=MODEL_CONFIG['openai']['org_id'] if MODEL_CONFIG['openai']['org_id'] else None
+        )
         
     async def analyze_sentiment(self,
                               market_data: Dict[str, Any],
@@ -176,14 +179,14 @@ class SentimentAnalyzer:
             - reasoning: 分析理由
             """
             
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['openai']['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的市场新闻分析师，擅长分析新闻对市场的影响。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['openai']['temperature'],
+                max_tokens=self.model_config['openai']['max_tokens']
             )
             
             analysis = self._parse_gpt_response(response.choices[0].message.content)
@@ -339,14 +342,14 @@ class SentimentAnalyzer:
             - reasoning: 分析理由
             """
             
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['openai']['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的市场情绪分析专家，擅长综合分析各种市场情绪指标。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['openai']['temperature'],
+                max_tokens=self.model_config['openai']['max_tokens']
             )
             
             analysis = self._parse_gpt_response(response.choices[0].message.content)
