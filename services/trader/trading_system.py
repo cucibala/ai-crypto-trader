@@ -84,7 +84,7 @@ class TradingSystem:
                 "timestamp": timestamp
             }
             params["signature"] = self.client.generate_signature(params)
-            
+           
             open_orders = await self.client._send_request(
                 method="openOrders.status",
                 params=params
@@ -141,6 +141,12 @@ class TradingSystem:
             if not self._check_risk_limits(symbol, side, quantity, price):
                 raise ValueError("订单超出风险限制")
                 
+            # 处理价格和数量的精度
+            if symbol == "DOGEUSDT":
+                quantity = quantity.quantize(Decimal('1'))  # DOGE 使用整数
+                if price:
+                    price = price.quantize(Decimal('0.000001'))  # 价格6位小数
+                
             # 构建订单参数
             timestamp = int(datetime.now().timestamp() * 1000)
             params = {
@@ -151,19 +157,19 @@ class TradingSystem:
                 "quantity": str(quantity),
                 "timestamp": timestamp
             }
-            
             if order_type == "LIMIT":
                 if not price:
                     raise ValueError("限价单必须指定价格")
                 params["price"] = str(price)
                 params["timeInForce"] = "GTC"
-                
+            print(params)
+
             # 生成签名
             params["signature"] = self.client.generate_signature(params)
                 
             # 发送订单
             order = await self.client._send_request(
-                method="order.place",
+                method="order.test",  # 使用正确的方法名
                 params=params
             )
             
@@ -173,11 +179,11 @@ class TradingSystem:
             # 更新交易统计
             self.daily_trades_count += 1
             
-            logger.info(f"下单成功: {order}")
+            logger.info("下单成功: %s", order)
             return order
             
         except Exception as e:
-            logger.error(f"下单失败: {str(e)}")
+            logger.error("下单失败: %s", str(e))
             raise
             
     async def cancel_order(self, symbol: str, order_id: int) -> Dict:

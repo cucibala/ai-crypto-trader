@@ -36,7 +36,7 @@ async def test_trading_system():
         logger.info("账户摘要: %s", account_summary)
         
         # 3. 测试下限价单
-        symbol = "BTCUSDT"
+        symbol = "DOGEUSDT"
         logger.info("3. 测试下限价单 (%s)...", symbol)
         
         # 获取当前价格
@@ -47,8 +47,8 @@ async def test_trading_system():
         current_price = Decimal(price_info['price'])
         
         # 下一个低于市价20%的买单（不会立即成交）
-        order_price = current_price * Decimal('0.8')
-        quantity = Decimal('0.001')  # 最小数量
+        order_price = (current_price * Decimal('0.8')).quantize(Decimal('0.000001'))  # 限制价格为6位小数
+        quantity = Decimal('20')  # DOGE 使用整数数量
         
         logger.info("当前价格: %s", current_price)
         logger.info("下单价格: %s", order_price)
