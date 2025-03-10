@@ -102,6 +102,7 @@ async def test_account_data(client: BinanceClient):
         
         # 显示账户余额
         balances = account_info.get('balances', [])
+        logger.info(f"账户余额: {balances}")
         non_zero_balances = [
             balance for balance in balances
             if Decimal(balance['free']) > 0 or Decimal(balance['locked']) > 0

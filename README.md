@@ -287,4 +287,152 @@ MIT License
 
 - 项目维护者：[cucibala]
 - 邮箱：[cucibala@gmail.com]
-- 项目地址：[https://github.com/cucibala/ai-crypto-trader] 
+- 项目地址：[https://github.com/cucibala/ai-crypto-trader]
+
+# 币安 WebSocket API 测试工具
+
+这个项目提供了一个用于测试币安 WebSocket API 的工具，支持测试行情数据和账户信息。
+
+## 功能特点
+
+### 1. 行情数据测试
+- 获取实时价格信息
+- 查询24小时价格统计
+- 获取最新K线数据
+
+### 2. 账户信息测试
+- 获取账户状态和权限
+- 查看账户佣金费率
+- 显示账户资产余额
+
+## 环境要求
+
+- Python 3.7+
+- aiohttp
+- 币安 API 密钥（可选，仅账户测试需要）
+
+## 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+## 配置说明
+
+1. 创建 `.env` 文件并配置以下参数：
+
+```env
+# API配置（可选，仅账户测试需要）
+BINANCE_API_KEY=你的API密钥
+BINANCE_API_SECRET=你的API密钥密文
+
+# 代理设置（可选）
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+```
+
+2. 或者在 `config/settings.py` 中配置：
+
+```python
+BINANCE_API_KEY = "你的API密钥"
+BINANCE_API_SECRET = "你的API密钥密文"
+```
+
+## 使用方法
+
+### 运行测试脚本
+
+```bash
+python scripts/test_binance_ws_api.py
+```
+
+### 测试输出示例
+
+```
+开始测试市场数据...
+1. 获取交易对价格...
+BTCUSDT当前价格: 42156.78
+
+2. 获取24小时价格统计...
+BTCUSDT 24小时统计:
+最高价: 42500.00
+最低价: 41800.00
+成交量: 1234.5678
+涨跌幅: 2.5%
+
+3. 获取最新K线数据...
+BTCUSDT 最新1分钟K线:
+开盘价: 42156.78
+最高价: 42160.00
+最低价: 42155.55
+收盘价: 42157.89
+成交量: 12.3456
+
+开始测试账户数据...
+账户权限: ['SPOT']
+
+账户佣金费率:
+Maker费率: 0.001
+Taker费率: 0.001
+
+账户余额:
+BTC: 可用=1.23456789, 冻结=0.00000000
+USDT: 可用=1000.00, 冻结=0.00
+
+测试完成 ✅
+```
+
+## 错误处理
+
+1. API密钥未配置
+```
+警告: API密钥未配置，跳过账户数据测试
+```
+
+2. 网络连接错误
+```
+错误: WebSocket连接失败: [错误详情]
+```
+
+3. API请求错误
+```
+错误: 市场数据测试失败: [错误详情]
+错误: 账户数据测试失败: [错误详情]
+```
+
+## 注意事项
+
+1. 账户测试需要有效的 API 密钥
+2. API 密钥需要有读取权限
+3. 建议在测试网络环境下先进行测试
+4. 如果使用代理，确保代理服务器正常运行
+
+## 开发说明
+
+### 项目结构
+```
+├── config/
+│   └── settings.py         # 配置文件
+├── scripts/
+│   └── test_binance_ws_api.py  # 测试脚本
+├── utils/
+│   └── binance_client.py   # WebSocket客户端
+└── README.md               # 说明文档
+```
+
+### 添加新的测试
+1. 在 `test_binance_ws_api.py` 中添加新的测试函数
+2. 在 `main()` 函数中调用新的测试函数
+3. 更新相关文档
+
+## 参考文档
+
+- [币安 WebSocket API 文档](https://developers.binance.com/docs/zh-CN/binance-spot-api-docs/web-socket-api)
+- [币安 API 错误代码](https://developers.binance.com/docs/zh-CN/binance-spot-api-docs/errors)
+
+## 更新日志
+
+### v1.0.0 (2024-03-10)
+- 实现基本的行情数据测试
+- 实现账户信息测试
+- 添加详细的使用文档 
