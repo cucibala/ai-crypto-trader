@@ -169,7 +169,7 @@ class TradingSystem:
                 
             # 发送订单
             order = await self.client._send_request(
-                method="order.test",  # 使用正确的方法名
+                method="order.place",  # 使用正确的方法名
                 params=params
             )
             

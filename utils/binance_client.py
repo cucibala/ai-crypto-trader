@@ -148,7 +148,7 @@ class BinanceClient:
             'method': method,
             'params': params or {}
         }
-        
+
         # 如果需要签名
         if method.startswith('user.'):
             timestamp = int(time.time() * 1000)
