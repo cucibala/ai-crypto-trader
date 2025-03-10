@@ -209,6 +209,6 @@ MIT License
 
 ## 联系方式
 
-- 项目维护者：[Your Name]
-- 邮箱：[Your Email]
-- 项目地址：[GitHub Repository URL] 
+- 项目维护者：[cucibala]
+- 邮箱：[cucibala@gmail.com]
+- 项目地址：[https://github.com/cucibala/ai-crypto-trader] 
