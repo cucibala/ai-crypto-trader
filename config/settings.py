@@ -1,36 +1,73 @@
 import os
+import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 from dotenv import load_dotenv
 
 # 加载环境变量
 env_path = Path('.') / '.env'
 load_dotenv(dotenv_path=env_path)
 
+def _get_env_var(key: str, default: Any = None, required: bool = True) -> Any:
+    """
+    获取环境变量
+    
+    Args:
+        key: 环境变量名
+        default: 默认值
+        required: 是否必需
+        
+    Returns:
+        环境变量值
+    """
+    value = os.getenv(key, default)
+    if required and value is None:
+        raise ValueError(f"必需的环境变量 {key} 未设置")
+    return value
+
+def _parse_json_env(key: str, default: Any = None) -> Any:
+    """
+    解析JSON格式的环境变量
+    
+    Args:
+        key: 环境变量名
+        default: 默认值
+        
+    Returns:
+        解析后的值
+    """
+    value = _get_env_var(key, required=False)
+    if value:
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+    return default
+
 # API配置
-BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
-BINANCE_API_SECRET = os.getenv('BINANCE_API_SECRET')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+BINANCE_API_KEY = _get_env_var('BINANCE_API_KEY')
+BINANCE_API_SECRET = _get_env_var('BINANCE_API_SECRET')
+OPENAI_API_KEY = _get_env_var('OPENAI_API_KEY')
 
 # 数据库配置
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-REDIS_URI = os.getenv('REDIS_URI', 'redis://localhost:6379')
+MONGODB_URI = _get_env_var('MONGODB_URI', 'mongodb://localhost:27017/')
+REDIS_URI = _get_env_var('REDIS_URI', 'redis://localhost:6379')
 
 # 应用配置
-APP_ENV = os.getenv('APP_ENV', 'development')
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', 1000))  # USDT
-RISK_LIMIT_PERCENTAGE = float(os.getenv('RISK_LIMIT_PERCENTAGE', 2))  # %
-STOP_LOSS_PERCENTAGE = float(os.getenv('STOP_LOSS_PERCENTAGE', 1))  # %
+APP_ENV = _get_env_var('APP_ENV', 'development')
+LOG_LEVEL = _get_env_var('LOG_LEVEL', 'INFO')
+MAX_POSITION_SIZE = float(_get_env_var('MAX_POSITION_SIZE', 1000))  # USDT
+RISK_LIMIT_PERCENTAGE = float(_get_env_var('RISK_LIMIT_PERCENTAGE', 2))  # %
+STOP_LOSS_PERCENTAGE = float(_get_env_var('STOP_LOSS_PERCENTAGE', 1))  # %
 
 # 交易配置
-TRADING_PAIRS: List[str] = eval(os.getenv('TRADING_PAIRS', '["BTCUSDT", "ETHUSDT"]'))
-TRADING_INTERVAL = os.getenv('TRADING_INTERVAL', '1m')
-MAX_TRADES_PER_DAY = int(os.getenv('MAX_TRADES_PER_DAY', 10))
+TRADING_PAIRS: List[str] = eval(_get_env_var('TRADING_PAIRS', '["BTCUSDT", "ETHUSDT"]'))
+TRADING_INTERVAL = _get_env_var('TRADING_INTERVAL', '1m')
+MAX_TRADES_PER_DAY = int(_get_env_var('MAX_TRADES_PER_DAY', 10))
 
 # 监控配置
-PROMETHEUS_PORT = int(os.getenv('PROMETHEUS_PORT', 9090))
-GRAFANA_PORT = int(os.getenv('GRAFANA_PORT', 3000))
+PROMETHEUS_PORT = int(_get_env_var('PROMETHEUS_PORT', 9090))
+GRAFANA_PORT = int(_get_env_var('GRAFANA_PORT', 3000))
 
 # 日志配置
 LOG_CONFIG = {
@@ -49,7 +86,7 @@ LOG_CONFIG = {
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': 'app.log',
+            'filename': _get_env_var('LOG_FILE', 'logs/trading.log'),
             'formatter': 'standard',
             'level': LOG_LEVEL,
         },
@@ -65,9 +102,9 @@ LOG_CONFIG = {
 
 # AI模型配置
 MODEL_CONFIG = {
-    'model': 'gpt-4',
-    'temperature': 0.7,
-    'max_tokens': 1000,
+    'model': _get_env_var('OPENAI_MODEL', 'gpt-4-turbo-preview'),
+    'temperature': float(_get_env_var('OPENAI_TEMPERATURE', '0.7')),
+    'max_tokens': int(_get_env_var('OPENAI_MAX_TOKENS', '2000')),
 }
 
 # 风险管理配置
@@ -80,10 +117,10 @@ RISK_MANAGEMENT = {
 
 # 技术分析配置
 TECHNICAL_ANALYSIS = {
-    'rsi_period': 14,
+    'rsi_period': int(_get_env_var('RSI_PERIOD', '14')),
     'ma_periods': [7, 25, 99],
-    'bollinger_period': 20,
-    'bollinger_std': 2,
+    'bollinger_period': int(_get_env_var('BOLLINGER_PERIOD', '20')),
+    'bollinger_std': float(_get_env_var('BOLLINGER_STD', '2')),
 }
 
 # 数据采集配置
@@ -104,9 +141,33 @@ NOTIFICATION = {
     'enabled': True,
     'channels': ['log', 'email'],
     'email': {
-        'smtp_server': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
-        'smtp_port': int(os.getenv('SMTP_PORT', 587)),
-        'sender_email': os.getenv('SENDER_EMAIL'),
-        'sender_password': os.getenv('SENDER_PASSWORD'),
+        'smtp_server': _get_env_var('SMTP_SERVER', 'smtp.gmail.com'),
+        'smtp_port': int(_get_env_var('SMTP_PORT', 587)),
+        'sender_email': _get_env_var('SENDER_EMAIL'),
+        'sender_password': _get_env_var('SENDER_PASSWORD'),
     }
-} 
+}
+
+# 验证配置
+def validate_config():
+    """
+    验证配置是否完整
+    """
+    required_configs = [
+        ("OpenAI API密钥", OPENAI_API_KEY),
+        ("数据库用户名", _get_env_var('DB_USER')),
+        ("数据库密码", _get_env_var('DB_PASSWORD')),
+        ("Binance API密钥", BINANCE_API_KEY),
+        ("Binance API密钥", BINANCE_API_SECRET)
+    ]
+    
+    missing_configs = []
+    for name, value in required_configs:
+        if not value:
+            missing_configs.append(name)
+            
+    if missing_configs:
+        raise ValueError(f"缺少必需的配置项: {', '.join(missing_configs)}")
+        
+# 初始化时验证配置
+validate_config() 
