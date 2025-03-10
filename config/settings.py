@@ -184,6 +184,33 @@ API_KEYS = {
     'telegram': _get_env_var('TELEGRAM_API_KEY', required=False)
 }
 
+# 社交媒体API配置
+SOCIAL_MEDIA_CONFIG = {
+    'twitter': {
+        'api_key': _get_env_var('TWITTER_API_KEY', required=False),
+        'api_secret': _get_env_var('TWITTER_API_SECRET', required=False),
+        'access_token': _get_env_var('TWITTER_ACCESS_TOKEN', required=False),
+        'access_token_secret': _get_env_var('TWITTER_ACCESS_TOKEN_SECRET', required=False)
+    },
+    'reddit': {
+        'client_id': _get_env_var('REDDIT_CLIENT_ID', required=False),
+        'client_secret': _get_env_var('REDDIT_CLIENT_SECRET', required=False),
+        'user_agent': _get_env_var('REDDIT_USER_AGENT', required=False)
+    },
+    'telegram': {
+        'api_id': _get_env_var('TELEGRAM_API_ID', required=False),
+        'api_hash': _get_env_var('TELEGRAM_API_HASH', required=False),
+        'bot_token': _get_env_var('TELEGRAM_BOT_TOKEN', required=False)
+    }
+}
+
+# 更新MODEL_CONFIG
+MODEL_CONFIG.update({
+    'twitter_api_key': SOCIAL_MEDIA_CONFIG['twitter']['api_key'],
+    'reddit_api_key': SOCIAL_MEDIA_CONFIG['reddit']['client_id'],
+    'telegram_api_key': SOCIAL_MEDIA_CONFIG['telegram']['bot_token']
+})
+
 # 验证配置
 def validate_config():
     """
