@@ -69,6 +69,54 @@ async def test_market_data(client: BinanceClient):
         logger.error(f"市场数据测试失败: {str(e)}")
         raise
 
+async def test_account_data(client: BinanceClient):
+    """测试账户数据"""
+    try:
+        # 1. 获取账户信息
+        logger.info("\n1. 获取账户信息...")
+        timestamp = int(datetime.now().timestamp() * 1000)
+        params = {
+            "apiKey": BINANCE_API_KEY,
+            "timestamp": timestamp
+        }
+        params["signature"] = client.generate_signature(params)
+        
+        account_info = await client._send_request(
+            method="account.status",
+            params=params
+        )
+        
+        # 验证账户状态
+        if account_info.get('accountType') != 'SPOT':
+            logger.warning("非现货账户！")
+            
+        # 显示账户权限
+        permissions = account_info.get('permissions', [])
+        logger.info(f"账户权限: {permissions}")
+        
+        # 显示账户佣金费率
+        commission_rates = account_info.get('commissionRates', {})
+        logger.info("\n账户佣金费率:")
+        logger.info(f"Maker费率: {commission_rates.get('maker', 'N/A')}")
+        logger.info(f"Taker费率: {commission_rates.get('taker', 'N/A')}")
+        
+        # 显示账户余额
+        balances = account_info.get('balances', [])
+        non_zero_balances = [
+            balance for balance in balances
+            if Decimal(balance['free']) > 0 or Decimal(balance['locked']) > 0
+        ]
+        
+        logger.info("\n账户余额:")
+        for balance in non_zero_balances:
+            logger.info(f"{balance['asset']}: "
+                       f"可用={balance['free']}, "
+                       f"冻结={balance['locked']}")
+        
+    except Exception as e:
+        logger.error(f"账户数据测试失败: {str(e)}")
+        raise
+
 async def main():
     """主函数"""
     try:
@@ -76,9 +124,17 @@ async def main():
         client = BinanceClient()
         
         try:
-            # 测试市场数据
+            # 1. 测试市场数据
             logger.info("开始测试市场数据...")
             await test_market_data(client)
+            
+            # 2. 测试账户数据
+            if BINANCE_API_KEY and BINANCE_API_SECRET:
+                logger.info("\n开始测试账户数据...")
+                await test_account_data(client)
+            else:
+                logger.warning("\nAPI密钥未配置，跳过账户数据测试")
+            
             logger.info("\n测试完成 ✅")
             
         finally:
