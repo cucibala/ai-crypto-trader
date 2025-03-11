@@ -150,19 +150,19 @@ class BinanceClient:
         }
 
         # 如果需要签名
-        if method.startswith('user.'):
-            timestamp = int(time.time() * 1000)
-            request['params']['timestamp'] = timestamp
-            request['params']['apiKey'] = self.api_key
+        # if method.startswith('account.'):
+        #     timestamp = int(time.time() * 1000)
+        #     request['params']['timestamp'] = timestamp
+        #     request['params']['apiKey'] = self.api_key
             
-            # 生成签名
-            query_string = urlencode(sorted(request['params'].items()))
-            signature = hmac.new(
-                self.api_secret.encode('utf-8'),
-                query_string.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
-            request['params']['signature'] = signature
+        #     # 生成签名
+        #     query_string = urlencode(sorted(request['params'].items()))
+        #     signature = hmac.new(
+        #         self.api_secret.encode('utf-8'),
+        #         query_string.encode('utf-8'),
+        #         hashlib.sha256
+        #     ).hexdigest()
+        #     request['params']['signature'] = signature
             
         # 创建Future对象
         future = asyncio.Future()
@@ -199,7 +199,7 @@ class BinanceClient:
         
     async def get_account_info(self) -> Dict[str, Any]:
         """获取账户信息"""
-        return await self._send_request('user.account')
+        return await self._send_request('account')
         
     async def get_symbol_price(self, symbol: str) -> Dict[str, Any]:
         """获取交易对价格"""
@@ -226,7 +226,7 @@ class BinanceClient:
             params['price'] = price
             params['timeInForce'] = time_in_force
             
-        return await self._send_request('user.order.place', params)
+        return await self._send_request('order.place', params)
         
     async def cancel_order(self,
                           symbol: str,
@@ -242,14 +242,14 @@ class BinanceClient:
         else:
             raise ValueError("必须指定order_id或orig_client_order_id")
             
-        return await self._send_request('user.order.cancel', params)
+        return await self._send_request('order.cancel', params)
         
     async def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """获取当前挂单"""
         params = {}
         if symbol:
             params['symbol'] = symbol
-        return await self._send_request('user.openOrders', params)
+        return await self._send_request('openOrders', params)
         
     async def get_order(self,
                        symbol: str,
@@ -265,7 +265,7 @@ class BinanceClient:
         else:
             raise ValueError("必须指定order_id或orig_client_order_id")
             
-        return await self._send_request('user.order', params)
+        return await self._send_request('order', params)
         
     async def close(self):
         """关闭连接"""
