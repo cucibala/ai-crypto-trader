@@ -26,6 +26,53 @@
             </div>
         </div>
 
+        <!-- 市场分析 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">市场分析</h2>
+                <button onclick="fetchMarketAnalysis()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    刷新分析
+                </button>
+            </div>
+            <div class="space-y-6" id="analysis-container">
+                <!-- 市场数据 -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">当前价格</p>
+                        <p class="text-xl font-bold" id="current-price">加载中...</p>
+                    </div>
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">24h 涨跌</p>
+                        <p class="text-xl font-bold" id="price-change">加载中...</p>
+                    </div>
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">24h 成交量</p>
+                        <p class="text-xl font-bold" id="volume">加载中...</p>
+                    </div>
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">买卖比</p>
+                        <p class="text-xl font-bold" id="buy-sell-ratio">加载中...</p>
+                    </div>
+                </div>
+
+                <!-- AI 分析结果 -->
+                <div class="space-y-4">
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <h3 class="font-semibold mb-2">市场趋势分析</h3>
+                        <p id="market-trend" class="text-gray-700">加载中...</p>
+                    </div>
+                    <div class="border-l-4 border-green-500 pl-4">
+                        <h3 class="font-semibold mb-2">交易建议</h3>
+                        <p id="trading-suggestion" class="text-gray-700">加载中...</p>
+                    </div>
+                    <div class="border-l-4 border-yellow-500 pl-4">
+                        <h3 class="font-semibold mb-2">风险提示</h3>
+                        <p id="risk-warning" class="text-gray-700">加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 交易表单 -->
         <div class="bg-white rounded-lg shadow-md p-6">
             <h2 class="text-xl font-semibold mb-4">交易操作</h2>
@@ -66,6 +113,36 @@
             }
         }
 
+        // 获取市场分析
+        async function fetchMarketAnalysis() {
+            try {
+                const response = await axios.get('/api/market_analysis');
+                if (response.data.success) {
+                    const { market_data, analysis, strategy } = response.data.data;
+                    
+                    // 更新市场数据
+                    document.getElementById('current-price').textContent = `$${market_data.price.toFixed(2)}`;
+                    document.getElementById('price-change').textContent = `${market_data.price_change_24h.toFixed(2)}%`;
+                    document.getElementById('volume').textContent = `$${(market_data.volume_24h / 1000000).toFixed(2)}M`;
+                    
+                    const buyVolume = market_data.buy_volume;
+                    const sellVolume = market_data.sell_volume;
+                    const ratio = (buyVolume / sellVolume).toFixed(2);
+                    document.getElementById('buy-sell-ratio').textContent = ratio;
+                    
+                    // 更新分析结果
+                    document.getElementById('market-trend').textContent = analysis.reasoning || '暂无分析';
+                    document.getElementById('trading-suggestion').textContent = 
+                        `建议操作: ${strategy.action === 'buy' ? '买入' : strategy.action === 'sell' ? '卖出' : '观望'}\n` +
+                        `目标价格: $${strategy.entry_price}\n` +
+                        `止损价格: $${strategy.stop_loss}`;
+                    document.getElementById('risk-warning').textContent = strategy.reasoning || '暂无风险提示';
+                }
+            } catch (error) {
+                console.error('获取市场分析失败:', error);
+            }
+        }
+
         // 提交交易
         document.getElementById('trade-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -90,8 +167,12 @@
             }
         });
 
-        // 页面加载时获取余额
+        // 页面加载时获取数据
         fetchBalance();
+        fetchMarketAnalysis();
+
+        // 每5分钟自动刷新一次分析
+        setInterval(fetchMarketAnalysis, 5 * 60 * 1000);
     </script>
 </body>
 </html> 

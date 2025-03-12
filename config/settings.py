@@ -100,9 +100,9 @@ LOG_CONFIG = {
     }
 }
 
-# AI模型配置
+# GPT模型配置
 MODEL_CONFIG = {
-    # OpenAI配置
+   # OpenAI配置
     'openai': {
         'api_key': _get_env_var('OPENAI_API_KEY'),
         'model': _get_env_var('OPENAI_MODEL', 'gpt-4-turbo-preview'),
@@ -132,6 +132,24 @@ MODEL_CONFIG = {
         'url': _get_env_var('LLM_PROXY_URL', required=False),
         'key': _get_env_var('LLM_PROXY_KEY', required=False)
     }
+}
+
+# 技术分析参数
+TECHNICAL_PARAMS = {
+    "rsi_period": 14,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "bollinger_period": 20,
+    "bollinger_std": 2
+}
+
+# 交易参数
+TRADING_PARAMS = {
+    "max_position_size": 0.1,  # 最大仓位比例
+    "min_confidence": 0.7,     # 最小置信度
+    "stop_loss_pct": 0.02,    # 止损百分比
+    "take_profit_pct": 0.05   # 止盈百分比
 }
 
 # 风险管理配置

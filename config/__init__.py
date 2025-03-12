@@ -1,0 +1,4 @@
+# 配置包初始化文件
+from .settings import MODEL_CONFIG, TECHNICAL_PARAMS, TRADING_PARAMS
+
+__all__ = ['MODEL_CONFIG', 'TECHNICAL_PARAMS', 'TRADING_PARAMS'] 
