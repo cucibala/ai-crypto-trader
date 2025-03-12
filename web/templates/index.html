@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC/USDT 交易系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">BTC/USDT 交易系统</h1>
+        
+        <!-- 余额信息 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">账户余额</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-blue-50 rounded-lg">
+                    <p class="text-sm text-gray-600">BTC 余额</p>
+                    <p class="text-2xl font-bold text-blue-600" id="btc-balance">加载中...</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg">
+                    <p class="text-sm text-gray-600">USDT 余额</p>
+                    <p class="text-2xl font-bold text-green-600" id="usdt-balance">加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 交易表单 -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">交易操作</h2>
+            <form id="trade-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">交易类型</label>
+                    <select id="trade-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="buy">买入 BTC</option>
+                        <option value="sell">卖出 BTC</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">数量</label>
+                    <input type="number" id="trade-amount" step="0.00000001" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="请输入交易数量">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">价格</label>
+                    <input type="number" id="trade-price" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="请输入交易价格">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    提交交易
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 获取余额信息
+        async function fetchBalance() {
+            try {
+                const response = await axios.get('/api/balance');
+                if (response.data.success) {
+                    document.getElementById('btc-balance').textContent = response.data.data.btc_balance.toFixed(8);
+                    document.getElementById('usdt-balance').textContent = response.data.data.usdt_balance.toFixed(2);
+                }
+            } catch (error) {
+                console.error('获取余额失败:', error);
+            }
+        }
+
+        // 提交交易
+        document.getElementById('trade-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const tradeType = document.getElementById('trade-type').value;
+            const amount = document.getElementById('trade-amount').value;
+            const price = document.getElementById('trade-price').value;
+
+            try {
+                const response = await axios.post('/api/trade', {
+                    type: tradeType,
+                    amount: parseFloat(amount),
+                    price: parseFloat(price)
+                });
+
+                if (response.data.success) {
+                    alert('交易提交成功！');
+                    fetchBalance(); // 刷新余额
+                }
+            } catch (error) {
+                alert('交易失败：' + (error.response?.data?.message || error.message));
+            }
+        });
+
+        // 页面加载时获取余额
+        fetchBalance();
+    </script>
+</body>
+</html> 

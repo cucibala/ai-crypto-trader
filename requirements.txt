@@ -38,4 +38,6 @@ mypy==1.7.1
 # 新增依赖
 aiohttp>=3.8.0
 websockets>=10.0
-asyncio>=3.4.3 
+asyncio>=3.4.3
+flask==2.0.1
+flask-cors==3.0.10 
