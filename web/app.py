@@ -63,7 +63,7 @@ def get_balance():
         }), 500
 
 @app.route('/api/market_analysis', methods=['GET'])
-async def get_market_analysis():
+def get_market_analysis():
     try:
         # 获取市场数据
         ticker = binance_client.get_symbol_ticker(symbol="BTCUSDT")
@@ -89,10 +89,14 @@ async def get_market_analysis():
             market_data['price_change_24h'] = ((current_price - yesterday_price) / yesterday_price) * 100
         
         # 使用 GPT 模型分析市场
-        analysis_result = await gpt_model.analyze_market(market_data)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        analysis_result = loop.run_until_complete(gpt_model.analyze_market(market_data))
         
         # 生成交易策略
-        strategy = await gpt_model.generate_strategy(analysis_result)
+        strategy = loop.run_until_complete(gpt_model.generate_strategy(analysis_result))
+        loop.close()
         
         return jsonify({
             'success': True,

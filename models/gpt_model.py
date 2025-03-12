@@ -2,8 +2,7 @@ import json
 import logging
 from typing import Dict, List, Any
 from datetime import datetime
-
-import openai
+from openai import OpenAI
 from config.settings import MODEL_CONFIG
 from models.base_model import BaseModel
 
@@ -22,8 +21,15 @@ class GPTModel(BaseModel):
             api_key: OpenAI API密钥
         """
         self.api_key = api_key
-        openai.api_key = api_key
-        self.model_config = MODEL_CONFIG
+        self.model_config = MODEL_CONFIG['openai']
+        
+        # 配置OpenAI客户端
+        base_url = MODEL_CONFIG['proxy']['url'] if MODEL_CONFIG['proxy']['url'] else "https://api.openai.com/v1"
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=self.model_config['org_id'] if self.model_config['org_id'] else None
+        )
         
     async def analyze_market(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -37,14 +43,14 @@ class GPTModel(BaseModel):
             prompt = self._build_analysis_prompt(market_summary)
             
             # 调用GPT进行分析
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的加密货币市场分析师，擅长技术分析和市场情绪分析。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['temperature'],
+                max_tokens=self.model_config['max_tokens']
             )
             
             # 解析响应
@@ -71,14 +77,14 @@ class GPTModel(BaseModel):
             # 构建策略生成提示
             prompt = self._build_strategy_prompt(analysis_result)
             
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的量化交易策略师，擅长制定风险可控的交易策略。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['temperature'],
+                max_tokens=self.model_config['max_tokens']
             )
             
             strategy = self._parse_gpt_response(response.choices[0].message.content)
@@ -103,14 +109,14 @@ class GPTModel(BaseModel):
             # 构建风险评估提示
             prompt = self._build_risk_prompt(strategy, portfolio)
             
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的风险管理专家，擅长评估交易策略的风险。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['temperature'],
+                max_tokens=self.model_config['max_tokens']
             )
             
             risk_assessment = self._parse_gpt_response(response.choices[0].message.content)
@@ -135,14 +141,14 @@ class GPTModel(BaseModel):
             # 构建参数优化提示
             prompt = self._build_optimization_prompt(historical_data)
             
-            response = await openai.ChatCompletion.acreate(
-                model=self.model_config["model"],
+            response = self.client.chat.completions.create(
+                model=self.model_config['model'],
                 messages=[
                     {"role": "system", "content": "你是一个专业的量化交易系统优化专家，擅长优化交易策略参数。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config["temperature"],
-                max_tokens=self.model_config["max_tokens"]
+                temperature=self.model_config['temperature'],
+                max_tokens=self.model_config['max_tokens']
             )
             
             optimized_params = self._parse_gpt_response(response.choices[0].message.content)
@@ -275,13 +281,10 @@ class GPTModel(BaseModel):
         """
         构建参数优化提示
         """
-        # 计算历史数据的基本统计信息
-        data_summary = self._summarize_historical_data(historical_data)
-        
         prompt = f"""
-        请基于以下历史数据统计信息优化策略参数：
+        请基于以下历史数据优化策略参数：
         
-        {data_summary}
+        {json.dumps(historical_data, indent=2, ensure_ascii=False)}
         
         请从以下几个方面进行优化：
         1. 技术指标参数
@@ -298,37 +301,6 @@ class GPTModel(BaseModel):
         - reasoning: 优化理由
         """
         return prompt
-        
-    def _summarize_historical_data(self, historical_data: List[Dict[str, Any]]) -> str:
-        """
-        总结历史数据
-        """
-        if not historical_data:
-            return "没有可用的历史数据"
-            
-        # 计算基本统计信息
-        prices = [d.get('price', 0) for d in historical_data]
-        volumes = [d.get('volume', 0) for d in historical_data]
-        
-        summary = f"""
-        历史数据统计：
-        
-        价格统计：
-        - 最高价：{max(prices)}
-        - 最低价：{min(prices)}
-        - 平均价：{sum(prices) / len(prices)}
-        
-        成交量统计：
-        - 最大成交量：{max(volumes)}
-        - 最小成交量：{min(volumes)}
-        - 平均成交量：{sum(volumes) / len(volumes)}
-        
-        数据周期：
-        - 起始时间：{historical_data[0].get('timestamp', 'N/A')}
-        - 结束时间：{historical_data[-1].get('timestamp', 'N/A')}
-        - 数据点数量：{len(historical_data)}
-        """
-        return summary
         
     def _parse_gpt_response(self, response_text: str) -> Dict[str, Any]:
         """
