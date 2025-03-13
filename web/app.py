@@ -13,7 +13,6 @@ sys.path.append(str(ROOT_DIR))
 
 from models.gpt_model import GPTModel
 from models.base_model import BaseModel
-from models.database import get_recent_strategies, get_recent_market_analysis, save_market_analysis, save_trading_strategy
 from config.settings import MODEL_CONFIG
 from dotenv import load_dotenv
 
@@ -209,54 +208,25 @@ def get_market_analysis():
     try:
         # 获取市场数据
         ticker = binance_client.get_symbol_ticker(symbol="BTCUSDT")
-        ticker_24h = binance_client.get_ticker(symbol='BTCUSDT')
-        depth = binance_client.get_order_book(symbol='BTCUSDT')
         
-        # 获取K线数据
+        # 获取多个时间维度的K线数据
         klines_1d = binance_client.get_klines(
             symbol="BTCUSDT", 
             interval=Client.KLINE_INTERVAL_1DAY,
-            limit=90
+            limit=90  # 获取90天的日线数据
         )
         
         klines_4h = binance_client.get_klines(
             symbol="BTCUSDT", 
             interval=Client.KLINE_INTERVAL_4HOUR,
-            limit=120
+            limit=120  # 获取最近20天的4小时数据
         )
         
         klines_1h = binance_client.get_klines(
             symbol="BTCUSDT", 
             interval=Client.KLINE_INTERVAL_1HOUR,
-            limit=168
+            limit=168  # 获取最近7天的小时数据
         )
-        
-        # 获取历史策略和分析
-        recent_strategies = get_recent_strategies(limit=5)
-        recent_analysis = get_recent_market_analysis(limit=5)
-        
-        # 转换策略数据为JSON格式
-        history_strategies = []
-        for strategy in recent_strategies:
-            history_strategies.append({
-                'timestamp': strategy.timestamp.isoformat(),
-                'action': strategy.action,
-                'entry_price': strategy.entry_price,
-                'stop_loss': strategy.stop_loss,
-                'take_profit': strategy.take_profit,
-                'risk_level': strategy.risk_level,
-                'reasoning': strategy.reasoning
-            })
-            
-        # 转换分析数据为JSON格式
-        history_analysis = []
-        for analysis in recent_analysis:
-            history_analysis.append({
-                'timestamp': analysis.timestamp.isoformat(),
-                'market_trend': analysis.market_trend,
-                'market_sentiment': analysis.market_sentiment,
-                'confidence': analysis.confidence
-            })
         
         logger.debug(f"获取到 {len(klines_1d)} 根日线数据")
         logger.debug(f"获取到 {len(klines_4h)} 根4小时线数据")
@@ -264,8 +234,13 @@ def get_market_analysis():
         
         if len(klines_1d) < 26:  # MACD需要26天数据
             logger.warning(f"日线数据不足，当前只有 {len(klines_1d)} 根K线")
+            
+        depth = binance_client.get_order_book(symbol='BTCUSDT')
         
-        # 计算技术指标
+        # 获取24小时统计数据
+        ticker_24h = binance_client.get_ticker(symbol='BTCUSDT')
+        
+        # 计算多个时间维度的技术指标
         rsi_values = {
             '1d': calculate_rsi(klines_1d),
             '4h': calculate_rsi(klines_4h),
@@ -293,7 +268,15 @@ def get_market_analysis():
         # 计算24小时成交量变化
         current_volume = float(ticker_24h['volume'])
         previous_volume = float(klines_1d[-2][5]) if len(klines_1d) >= 2 else current_volume
+        
+        # 计算成交量变化百分比
         volume_change_24h = ((current_volume - previous_volume) / previous_volume * 100) if previous_volume > 0 else 0
+        
+        # 计算7天平均成交量和当前成交量的对比
+        avg_volume_7d = sum(float(k[5]) for k in klines_1d[-7:]) / 7 if len(klines_1d) >= 7 else current_volume
+        volume_vs_avg = ((current_volume - avg_volume_7d) / avg_volume_7d * 100) if avg_volume_7d > 0 else 0
+        
+        logger.info(f"成交量分析 - 当前: {current_volume:.2f}, 24h变化: {volume_change_24h:.2f}%, 7日均量对比: {volume_vs_avg:.2f}%")
         
         market_data = {
             'symbol': 'BTCUSDT',
@@ -303,8 +286,11 @@ def get_market_analysis():
             'quote_volume': float(ticker_24h['quoteVolume']),
             'base_volume': current_volume,
             'volume_change_24h': round(volume_change_24h, 2),
+            'volume_vs_7d_avg': round(volume_vs_avg, 2),
             'buy_volume': sum(float(bid[1]) for bid in depth['bids'][:10]),
             'sell_volume': sum(float(ask[1]) for ask in depth['asks'][:10]),
+            'buy_depth': depth['bids'][:5],
+            'sell_depth': depth['asks'][:5],
             'rsi': rsi_values,
             'macd': macd_values,
             'bollinger_position': bollinger_values,
@@ -326,9 +312,7 @@ def get_market_analysis():
             'data': {
                 'market_data': market_data,
                 'analysis': analysis_result,
-                'strategy': strategy,
-                'history_strategies': history_strategies,
-                'history_analysis': history_analysis
+                'strategy': strategy
             }
         })
     except Exception as e:
@@ -563,152 +547,5 @@ def get_market_data():
             'error': str(e)
         }), 500
 
-@app.route('/api/recent-strategies', methods=['GET'])
-def get_strategies():
-    """获取最近的交易策略"""
-    try:
-        strategies = get_recent_strategies()
-        return jsonify({"success": True, "data": strategies})
-    except Exception as e:
-        logger.error(f"获取最近交易策略时出错: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/recent-analysis', methods=['GET'])
-def get_analysis():
-    """获取最近的市场分析"""
-    try:
-        analysis = get_recent_market_analysis()
-        return jsonify({"success": True, "data": analysis})
-    except Exception as e:
-        logger.error(f"获取最近市场分析时出错: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/save-analysis', methods=['POST'])
-def save_analysis():
-    """保存市场分析"""
-    try:
-        data = request.json
-        analysis_text = data.get('analysis')
-        if not analysis_text:
-            return jsonify({"success": False, "error": "分析内容不能为空"}), 400
-        
-        save_market_analysis(analysis_text)
-        return jsonify({"success": True, "message": "市场分析保存成功"})
-    except Exception as e:
-        logger.error(f"保存市场分析时出错: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/save-strategy', methods=['POST'])
-def save_strategy():
-    """保存交易策略"""
-    try:
-        data = request.json
-        strategy_text = data.get('strategy')
-        if not strategy_text:
-            return jsonify({"success": False, "error": "策略内容不能为空"}), 400
-        
-        save_trading_strategy(strategy_text)
-        return jsonify({"success": True, "message": "交易策略保存成功"})
-    except Exception as e:
-        logger.error(f"保存交易策略时出错: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/position', methods=['GET'])
-def get_position_info():
-    """获取当前仓位信息"""
-    try:
-        position = get_current_position()
-        if position:
-            # 获取当前市场价格
-            ticker = binance_client.get_symbol_ticker(symbol="BTCUSDT")
-            current_price = float(ticker['price'])
-            
-            # 计算盈亏
-            if position.side == 'LONG':
-                pnl = (current_price - position.entry_price) * position.quantity
-            else:  # SHORT
-                pnl = (position.entry_price - current_price) * position.quantity
-            
-            # 计算盈亏百分比
-            pnl_percentage = (pnl / (position.entry_price * position.quantity)) * 100
-            
-            return jsonify({
-                'success': True,
-                'data': {
-                    'symbol': position.symbol,
-                    'side': position.side,
-                    'entry_price': position.entry_price,
-                    'current_price': current_price,
-                    'quantity': position.quantity,
-                    'stop_loss': position.stop_loss,
-                    'take_profit': position.take_profit,
-                    'pnl': round(pnl, 2),
-                    'pnl_percentage': round(pnl_percentage, 2),
-                    'entry_time': position.entry_time.isoformat(),
-                    'status': position.status
-                }
-            })
-        else:
-            return jsonify({
-                'success': True,
-                'data': None
-            })
-    except Exception as e:
-        logger.error(f"获取仓位信息失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/position/history', methods=['GET'])
-def get_position_history_api():
-    """获取历史仓位记录"""
-    try:
-        positions = get_position_history(limit=10)
-        history = []
-        for pos in positions:
-            history.append({
-                'symbol': pos.symbol,
-                'side': pos.side,
-                'entry_price': pos.entry_price,
-                'quantity': pos.quantity,
-                'stop_loss': pos.stop_loss,
-                'take_profit': pos.take_profit,
-                'pnl': pos.pnl,
-                'entry_time': pos.entry_time.isoformat(),
-                'close_time': pos.close_time.isoformat() if pos.close_time else None,
-                'close_price': pos.close_price,
-                'status': pos.status
-            })
-        
-        return jsonify({
-            'success': True,
-            'data': history
-        })
-    except Exception as e:
-        logger.error(f"获取历史仓位记录失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/logs', methods=['GET'])
-def get_recent_logs():
-    """获取最近的日志记录"""
-    try:
-        with open('auto_trader.log', 'r') as f:
-            # 读取最后1000行日志
-            lines = f.readlines()[-1000:]
-            return jsonify({
-                'success': True,
-                'data': lines
-            })
-    except Exception as e:
-        logger.error(f"获取日志记录失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    app.run(debug=True, port=5000) 
