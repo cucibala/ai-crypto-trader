@@ -237,70 +237,113 @@ class GPTModel(BaseModel):
         """
         准备市场数据摘要
         """
-        # 记录输入的市场数据
-        logger.info("开始准备市场数据摘要")
-        logger.debug(f"输入的市场数据: {json.dumps(market_data, indent=2, ensure_ascii=False)}")
-        
-        # 验证必要的字段
-        required_fields = ['symbol', 'price', 'price_change_24h', 'volume_24h', 'quote_volume', 'base_volume']
-        missing_fields = [field for field in required_fields if field not in market_data]
-        if missing_fields:
-            logger.warning(f"市场数据缺少必要字段: {missing_fields}")
+        try:
+            required_fields = [
+                'price', 'price_change_24h', 'volume_24h', 'quote_volume',
+                'volume_change_24h', 'volume_vs_7d_avg', 'rsi', 'macd',
+                'bollinger_position', 'price_trends', 'buy_depth', 'sell_depth'
+            ]
             
-        # 获取数据时使用默认值，并记录日志
-        symbol = market_data.get('symbol')
-        price = market_data.get('price')
-        price_change = market_data.get('price_change_24h', 0)
-        
-        # 交易量数据处理
-        volume_24h = market_data.get('volume_24h', 0)
-        quote_volume = market_data.get('quote_volume', 0)  # 计价货币交易量（如USDT）
-        base_volume = market_data.get('base_volume', 0)   # 基础货币交易量（如BTC）
-        buy_volume = market_data.get('buy_volume', 0)
-        sell_volume = market_data.get('sell_volume', 0)
-        
-        # 计算额外的交易量指标
-        volume_change_24h = market_data.get('volume_change_24h', 0)  # 24小时交易量变化
-        avg_trade_size = quote_volume / volume_24h if volume_24h > 0 else 0  # 平均交易规模
-        
-        logger.info(f"处理的市场数据 - 交易对: {symbol}, 价格: {price}, 24h变化: {price_change}%")
-        logger.info(f"交易量数据 - 24h成交量: {volume_24h}, 买入量: {buy_volume}, 卖出量: {sell_volume}")
-        logger.info(f"额外交易量指标 - 24h交易量变化: {volume_change_24h}%，平均交易规模: {avg_trade_size:.2f} USDT")
-        
-        # 记录技术指标数据
-        technical_indicators = {
-            'rsi': market_data.get('rsi', 'N/A'),
-            'macd': market_data.get('macd', 'N/A'),
-            'bollinger': market_data.get('bollinger_position', 'N/A')
-        }
-        logger.debug(f"技术指标数据: {technical_indicators}")
-        
-        # 构建摘要
-        summary = f"""
-        交易对: {symbol}
-        当前价格: {price}
-        24小时变化: {price_change}%
-        
-        交易量信息:
-        - 24小时成交量: {volume_24h} {symbol.split('USDT')[0]}
-        - 24小时成交额: {quote_volume} USDT
-        - 24小时交易量变化: {volume_change_24h}%
-        - 买入成交量: {buy_volume} {symbol.split('USDT')[0]}
-        - 卖出成交量: {sell_volume} {symbol.split('USDT')[0]}
-        - 平均交易规模: {avg_trade_size:.2f} USDT
-        
-        技术指标:
-        - RSI: {technical_indicators['rsi']}
-        - MACD: {technical_indicators['macd']}
-        - 布林带位置: {technical_indicators['bollinger']}
-        
-        市场深度:
-        - 买单深度: {market_data.get('buy_depth', [])}
-        - 卖单深度: {market_data.get('sell_depth', [])}
-        """
-        
-        logger.debug(f"生成的市场摘要:\n{summary}")
-        return summary
+            for field in required_fields:
+                if field not in market_data:
+                    raise ValueError(f"缺少必要的市场数据字段: {field}")
+            
+            # 构建多时间维度的技术分析摘要
+            technical_summary = {
+                '日线': {
+                    'RSI': market_data['rsi']['1d'],
+                    'MACD': market_data['macd']['1d'],
+                    'Bollinger': market_data['bollinger_position']['1d'],
+                    'MA趋势': market_data['price_trends']['1d'].get('trend', 'unknown'),
+                    '价格位置': market_data['price_trends']['1d'].get('price_position', 'unknown'),
+                    '30日高点': market_data['price_trends']['1d'].get('high_30d', 'N/A'),
+                    '30日低点': market_data['price_trends']['1d'].get('low_30d', 'N/A')
+                },
+                '4小时': {
+                    'RSI': market_data['rsi']['4h'],
+                    'MACD': market_data['macd']['4h'],
+                    'Bollinger': market_data['bollinger_position']['4h'],
+                    'MA趋势': market_data['price_trends']['4h'].get('trend', 'unknown'),
+                    '价格位置': market_data['price_trends']['4h'].get('price_position', 'unknown'),
+                    '7日高点': market_data['price_trends']['4h'].get('high_7d', 'N/A'),
+                    '7日低点': market_data['price_trends']['4h'].get('low_7d', 'N/A')
+                },
+                '1小时': {
+                    'RSI': market_data['rsi']['1h'],
+                    'MACD': market_data['macd']['1h'],
+                    'Bollinger': market_data['bollinger_position']['1h'],
+                    'MA趋势': market_data['price_trends']['1h'].get('trend', 'unknown'),
+                    '价格位置': market_data['price_trends']['1h'].get('price_position', 'unknown'),
+                    '24小时高点': market_data['price_trends']['1h'].get('high_24h', 'N/A'),
+                    '24小时低点': market_data['price_trends']['1h'].get('low_24h', 'N/A')
+                }
+            }
+            
+            # 记录技术分析摘要
+            logger.debug(f"技术分析摘要: {json.dumps(technical_summary, indent=2, ensure_ascii=False)}")
+            
+            # 计算买卖压力
+            total_buy_volume = sum(float(price) * float(qty) for price, qty in market_data['buy_depth'])
+            total_sell_volume = sum(float(price) * float(qty) for price, qty in market_data['sell_depth'])
+            buy_sell_ratio = total_buy_volume / total_sell_volume if total_sell_volume > 0 else 1
+            
+            market_summary = f"""
+当前市场状况分析：
+
+1. 价格数据：
+- 当前价格：{market_data['price']} USDT
+- 24小时涨跌幅：{market_data['price_change_24h']}%
+- 买卖盘压力比：{buy_sell_ratio:.2f}（大于1表示买压更大）
+
+2. 成交量分析：
+- 24小时成交量：{market_data['volume_24h']} BTC
+- 成交量变化：{market_data['volume_change_24h']}%
+- 相对7日均量：{market_data['volume_vs_7d_avg']}%
+- 24小时成交额：{market_data['quote_volume']} USDT
+
+3. 技术指标多维度分析：
+
+日线周期：
+- RSI: {technical_summary['日线']['RSI']}
+- MACD: {technical_summary['日线']['MACD']}
+- 布林带位置: {technical_summary['日线']['Bollinger']}%
+- MA趋势: {technical_summary['日线']['MA趋势']}
+- 价格位置: {technical_summary['日线']['价格位置']}
+- 30日价格区间: {technical_summary['日线']['30日低点']} - {technical_summary['日线']['30日高点']}
+
+4小时周期：
+- RSI: {technical_summary['4小时']['RSI']}
+- MACD: {technical_summary['4小时']['MACD']}
+- 布林带位置: {technical_summary['4小时']['Bollinger']}%
+- MA趋势: {technical_summary['4小时']['MA趋势']}
+- 价格位置: {technical_summary['4小时']['价格位置']}
+- 7日价格区间: {technical_summary['4小时']['7日低点']} - {technical_summary['4小时']['7日高点']}
+
+1小时周期：
+- RSI: {technical_summary['1小时']['RSI']}
+- MACD: {technical_summary['1小时']['MACD']}
+- 布林带位置: {technical_summary['1小时']['Bollinger']}%
+- MA趋势: {technical_summary['1小时']['MA趋势']}
+- 价格位置: {technical_summary['1小时']['价格位置']}
+- 24小时价格区间: {technical_summary['1小时']['24小时低点']} - {technical_summary['1小时']['24小时高点']}
+
+请基于以上数据进行全面分析，并给出以下建议：
+1. 主要趋势判断（多个时间维度）
+2. 支撑位和阻力位（基于价格区间和技术指标）
+3. 建议的交易方向和具体策略
+4. 入场价格区间（基于技术指标和市场结构）
+5. 止损位（至少距离入场价2%以上）
+6. 止盈目标（基于支撑/阻力位，设置多个目标）
+7. 风险等级评估（1-5，考虑趋势背离、波动性等因素）
+8. 建议的持仓时间
+9. 需要特别注意的风险因素
+
+请确保建议具有实际操作价值，止损和止盈的设置要考虑市场波动性，不要过于保守。同时要充分考虑多个时间维度的趋势，确保交易方向与主趋势一致。
+"""
+            return market_summary
+        except Exception as e:
+            logger.error(f"准备市场数据摘要时出错: {str(e)}", exc_info=True)
+            raise
         
     def _build_analysis_prompt(self, market_summary: str) -> str:
         """
