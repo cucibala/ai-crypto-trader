@@ -136,7 +136,7 @@
             <div class="strategy-card" id="strategy-info">
                 <div class="row">
                     <div class="col-md-6">
-                        <h4>操作建议</h4>
+                        <h4>当前策略</h4>
                         <p>交易动作: <span id="trade-action">加载中...</span></p>
                         <p>入场价格: <span id="entry-price">加载中...</span></p>
                         <p>止损价格: <span id="stop-loss">加载中...</span></p>
@@ -164,6 +164,31 @@
                 <div class="mt-3">
                     <h4>策略说明</h4>
                     <p id="strategy-reasoning">加载中...</p>
+                </div>
+                
+                <!-- 添加历史策略区域 -->
+                <div class="mt-4">
+                    <h4>历史策略</h4>
+                    <div id="history-strategies" class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>动作</th>
+                                    <th>入场价</th>
+                                    <th>止损</th>
+                                    <th>止盈</th>
+                                    <th>风险等级</th>
+                                    <th>结果</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-strategies-body">
+                                <tr>
+                                    <td colspan="7" class="text-center">加载中...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -314,6 +339,11 @@
                             orderBtn.hide();
                         }
                     }
+
+                    // 更新历史策略
+                    if (data.history_strategies) {
+                        updateHistoryStrategies(data.history_strategies);
+                    }
                 }
             });
         }
@@ -455,6 +485,44 @@
                 updateLastRefreshTime();
             }
         });
+
+        function updateHistoryStrategies(strategies) {
+            const tbody = $('#history-strategies-body');
+            tbody.empty();
+            
+            if (!strategies || strategies.length === 0) {
+                tbody.append('<tr><td colspan="7" class="text-center">暂无历史策略</td></tr>');
+                return;
+            }
+            
+            strategies.forEach(strategy => {
+                const row = $('<tr>');
+                row.append(`<td>${new Date(strategy.timestamp).toLocaleString()}</td>`);
+                row.append(`<td class="${strategy.action === 'BUY' ? 'text-success' : 'text-danger'}">${strategy.action}</td>`);
+                row.append(`<td>${strategy.entry_price}</td>`);
+                row.append(`<td>${strategy.stop_loss}</td>`);
+                row.append(`<td>${strategy.take_profit}</td>`);
+                row.append(`<td><span class="badge bg-${getRiskLevelClass(strategy.risk_level)}">${strategy.risk_level}</span></td>`);
+                row.append(`<td>${getStrategyResult(strategy)}</td>`);
+                tbody.append(row);
+            });
+        }
+        
+        function getRiskLevelClass(level) {
+            const levels = {
+                1: 'success',
+                2: 'info',
+                3: 'warning',
+                4: 'danger',
+                5: 'danger'
+            };
+            return levels[level] || 'secondary';
+        }
+        
+        function getStrategyResult(strategy) {
+            // TODO: 实现策略结果的计算和显示
+            return '进行中';
+        }
     </script>
 </body>
 </html> 

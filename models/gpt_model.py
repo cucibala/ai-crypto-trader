@@ -1,10 +1,13 @@
 import json
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from openai import OpenAI
 from config.settings import MODEL_CONFIG
 from models.base_model import BaseModel
+from .database import save_market_analysis, save_trading_strategy, get_recent_strategies, get_recent_market_analysis
+import os
+import openai
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
@@ -34,14 +37,19 @@ class GPTModel(BaseModel):
     基于GPT的市场分析模型
     """
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str = None):
         """
         初始化GPT模型
         
         Args:
             api_key: OpenAI API密钥
         """
-        self.api_key = api_key
+        super().__init__()
+        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+        if not self.api_key:
+            raise ValueError("OpenAI API key is required")
+        openai.api_key = self.api_key
+        
         self.model_config = MODEL_CONFIG['openai']
         
         # 配置OpenAI客户端
@@ -49,102 +57,138 @@ class GPTModel(BaseModel):
         logger.info(f"初始化 GPT 模型，使用模型: {self.model_config['model']}, API基础URL: {base_url}")
         
         self.client = OpenAI(
-            api_key=api_key,
+            api_key=self.api_key,
             base_url=base_url,
             organization=self.model_config['org_id'] if self.model_config['org_id'] else None
         )
         logger.info("GPT 模型初始化完成")
         
     async def analyze_market(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        分析市场数据
-        """
+        """分析市场数据"""
         try:
-            logger.info(f"开始分析市场数据: {market_data['symbol']}")
+            prompt = f"""
+            基于以下市场数据进行分析：
             
-            # 构建市场数据摘要
-            market_summary = self._prepare_market_summary(market_data)
-            logger.debug(f"市场数据摘要:\n{market_summary}")
+            当前市场数据：
+            - 交易对: {market_data['symbol']}
+            - 当前价格: {market_data['current_price']}
+            - 24小时涨跌幅: {market_data['price_change_24h']}%
+            - 24小时成交量: {market_data['volume_24h']}
+            - 报价成交量: {market_data['quote_volume']}
             
-            # 构建分析提示
-            prompt = self._build_analysis_prompt(market_summary)
-            logger.debug(f"分析提示:\n{prompt}")
+            请提供详细的市场分析，包括：
+            1. 市场趋势（上涨/下跌/震荡）
+            2. 市场情绪（看多/看空/中性）
+            3. 成交量分析
+            4. 关键支撑位和阻力位
+            5. 短期和中期走势预测
+            6. 建议的交易方向
+            7. 分析的置信度（0-100）
             
-            # 调用GPT进行分析
-            logger.info("正在调用 GPT API 进行市场分析...")
-            response = self.client.chat.completions.create(
-                model=self.model_config['model'],
+            请以JSON格式返回，包含以下字段：
+            {
+                "market_trend": "上涨/下跌/震荡",
+                "market_sentiment": "看多/看空/中性",
+                "analysis_text": "详细分析文本",
+                "support_levels": [价格1, 价格2],
+                "resistance_levels": [价格1, 价格2],
+                "trading_direction": "LONG/SHORT/WAIT",
+                "confidence": 0-100
+            }
+            """
+            
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "你是一个专业的加密货币市场分析师，擅长技术分析和市场情绪分析。"},
+                    {"role": "system", "content": "你是一个专业的加密货币交易分析师，擅长技术分析和市场情绪分析。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config['temperature'],
-                max_tokens=self.model_config['max_tokens']
+                temperature=0.7
             )
             
-            # 解析响应
-            raw_response = response.choices[0].message.content
-            logger.debug(f"GPT 原始响应:\n{raw_response}")
-            
-            analysis = self._parse_gpt_response(raw_response)
-            logger.info(f"市场分析完成，趋势: {analysis.get('trend', 'unknown')}")
-            
-            result = {
-                "timestamp": datetime.now().isoformat(),
-                "symbol": market_data["symbol"],
-                "analysis": analysis
-            }
-            logger.debug(f"完整分析结果:\n{json.dumps(result, indent=2, ensure_ascii=False)}")
-            return result
+            analysis = json.loads(response.choices[0].message.content)
+            logger.info(f"市场分析完成: {analysis}")
+            return analysis
             
         except Exception as e:
-            logger.error(f"市场分析失败: {str(e)}", exc_info=True)
-            return {
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            logger.error(f"市场分析失败: {str(e)}")
+            raise
             
-    async def generate_strategy(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        生成交易策略
-        """
+    async def generate_strategy(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """根据市场分析生成交易策略"""
         try:
-            logger.info("开始生成交易策略")
+            prompt = f"""
+            基于以下市场分析生成交易策略：
             
-            # 构建策略生成提示
-            prompt = self._build_strategy_prompt(analysis_result)
-            logger.debug(f"策略生成提示:\n{prompt}")
+            市场分析：
+            - 市场趋势: {analysis['market_trend']}
+            - 市场情绪: {analysis['market_sentiment']}
+            - 交易方向: {analysis['trading_direction']}
+            - 支撑位: {analysis['support_levels']}
+            - 阻力位: {analysis['resistance_levels']}
+            - 分析置信度: {analysis['confidence']}
             
-            logger.info("正在调用 GPT API 生成策略...")
-            response = self.client.chat.completions.create(
-                model=self.model_config['model'],
+            详细分析：
+            {analysis['analysis_text']}
+            
+            请生成具体的交易策略，包括：
+            1. 建议的操作（开多/开空/观望）
+            2. 入场价格
+            3. 止损价格
+            4. 止盈价格
+            5. 建议仓位大小（占总资金的百分比）
+            6. 风险等级（低/中/高）
+            7. 详细的策略说明
+            
+            请以JSON格式返回，包含以下字段：
+            {
+                "action": "OPEN_LONG/OPEN_SHORT/WAIT",
+                "entry_price": 数值,
+                "stop_loss": 数值,
+                "take_profit": 数值,
+                "position_size": 0-100,
+                "quantity": 数值,
+                "risk_level": "LOW/MEDIUM/HIGH",
+                "reasoning": "策略说明文本"
+            }
+            """
+            
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "你是一个专业的量化交易策略师，擅长制定风险可控的交易策略。"},
+                    {"role": "system", "content": "你是一个专业的加密货币交易策略师，擅长风险管理和交易策略制定。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.model_config['temperature'],
-                max_tokens=self.model_config['max_tokens']
+                temperature=0.7
             )
             
-            raw_response = response.choices[0].message.content
-            logger.debug(f"GPT 原始响应:\n{raw_response}")
-            
-            strategy = self._parse_gpt_response(raw_response)
-            logger.info(f"策略生成完成，建议操作: {strategy.get('action', 'unknown')}")
-            
-            result = {
-                "timestamp": datetime.now().isoformat(),
-                "strategy": strategy
-            }
-            logger.debug(f"完整策略:\n{json.dumps(result, indent=2, ensure_ascii=False)}")
-            return result
+            strategy = json.loads(response.choices[0].message.content)
+            logger.info(f"策略生成完成: {strategy}")
+            return strategy
             
         except Exception as e:
-            logger.error(f"策略生成失败: {str(e)}", exc_info=True)
-            return {
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            logger.error(f"策略生成失败: {str(e)}")
+            raise
+            
+    async def analyze_position(self, prompt: str) -> Dict[str, Any]:
+        """分析持仓风险"""
+        try:
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "你是一个专业的加密货币交易风险分析师，擅长持仓风险管理和仓位调整。"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7
+            )
+            
+            analysis = json.loads(response.choices[0].message.content)
+            logger.info(f"仓位风险分析完成: {analysis}")
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"仓位风险分析失败: {str(e)}")
+            raise
             
     async def evaluate_risk(self, strategy: Dict[str, Any], portfolio: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -238,109 +282,50 @@ class GPTModel(BaseModel):
         准备市场数据摘要
         """
         try:
-            required_fields = [
-                'price', 'price_change_24h', 'volume_24h', 'quote_volume',
-                'volume_change_24h', 'volume_vs_7d_avg', 'rsi', 'macd',
-                'bollinger_position', 'price_trends', 'buy_depth', 'sell_depth'
-            ]
+            # 获取最近的市场分析和策略
+            recent_analysis = get_recent_market_analysis(limit=3)
+            recent_strategies = get_recent_strategies(limit=3)
             
-            for field in required_fields:
-                if field not in market_data:
-                    raise ValueError(f"缺少必要的市场数据字段: {field}")
+            # 构建历史数据摘要
+            history_summary = "历史分析数据:\n"
+            for analysis in recent_analysis:
+                history_summary += f"- 时间: {analysis.timestamp}, 趋势: {analysis.market_trend}, 情绪: {analysis.market_sentiment}\n"
             
-            # 构建多时间维度的技术分析摘要
-            technical_summary = {
-                '日线': {
-                    'RSI': market_data['rsi']['1d'],
-                    'MACD': market_data['macd']['1d'],
-                    'Bollinger': market_data['bollinger_position']['1d'],
-                    'MA趋势': market_data['price_trends']['1d'].get('trend', 'unknown'),
-                    '价格位置': market_data['price_trends']['1d'].get('price_position', 'unknown'),
-                    '30日高点': market_data['price_trends']['1d'].get('high_30d', 'N/A'),
-                    '30日低点': market_data['price_trends']['1d'].get('low_30d', 'N/A')
-                },
-                '4小时': {
-                    'RSI': market_data['rsi']['4h'],
-                    'MACD': market_data['macd']['4h'],
-                    'Bollinger': market_data['bollinger_position']['4h'],
-                    'MA趋势': market_data['price_trends']['4h'].get('trend', 'unknown'),
-                    '价格位置': market_data['price_trends']['4h'].get('price_position', 'unknown'),
-                    '7日高点': market_data['price_trends']['4h'].get('high_7d', 'N/A'),
-                    '7日低点': market_data['price_trends']['4h'].get('low_7d', 'N/A')
-                },
-                '1小时': {
-                    'RSI': market_data['rsi']['1h'],
-                    'MACD': market_data['macd']['1h'],
-                    'Bollinger': market_data['bollinger_position']['1h'],
-                    'MA趋势': market_data['price_trends']['1h'].get('trend', 'unknown'),
-                    '价格位置': market_data['price_trends']['1h'].get('price_position', 'unknown'),
-                    '24小时高点': market_data['price_trends']['1h'].get('high_24h', 'N/A'),
-                    '24小时低点': market_data['price_trends']['1h'].get('low_24h', 'N/A')
-                }
-            }
+            history_summary += "\n历史策略数据:\n"
+            for strategy in recent_strategies:
+                history_summary += f"- 时间: {strategy.timestamp}, 动作: {strategy.action}, 入场价: {strategy.entry_price}, 理由: {strategy.reasoning}\n"
             
-            # 记录技术分析摘要
-            logger.debug(f"技术分析摘要: {json.dumps(technical_summary, indent=2, ensure_ascii=False)}")
-            
-            # 计算买卖压力
-            total_buy_volume = sum(float(price) * float(qty) for price, qty in market_data['buy_depth'])
-            total_sell_volume = sum(float(price) * float(qty) for price, qty in market_data['sell_depth'])
-            buy_sell_ratio = total_buy_volume / total_sell_volume if total_sell_volume > 0 else 1
-            
-            market_summary = f"""
-当前市场状况分析：
+            # 构建当前市场数据摘要
+            current_summary = f"""
+当前市场数据:
+- 价格: {market_data['price']}
+- 24h涨跌幅: {market_data['price_change_24h']}%
+- 24h成交量: {market_data['volume_24h']} BTC
+- 成交量变化: {market_data['volume_change_24h']}%
+- 买卖盘深度比: {market_data['buy_volume'] / market_data['sell_volume']:.2f}
 
-1. 价格数据：
-- 当前价格：{market_data['price']} USDT
-- 24小时涨跌幅：{market_data['price_change_24h']}%
-- 买卖盘压力比：{buy_sell_ratio:.2f}（大于1表示买压更大）
+技术指标:
+RSI:
+- 日线: {market_data['rsi']['1d']}
+- 4小时: {market_data['rsi']['4h']}
+- 1小时: {market_data['rsi']['1h']}
 
-2. 成交量分析：
-- 24小时成交量：{market_data['volume_24h']} BTC
-- 成交量变化：{market_data['volume_change_24h']}%
-- 相对7日均量：{market_data['volume_vs_7d_avg']}%
-- 24小时成交额：{market_data['quote_volume']} USDT
+MACD:
+- 日线: {json.dumps(market_data['macd']['1d'])}
+- 4小时: {json.dumps(market_data['macd']['4h'])}
+- 1小时: {json.dumps(market_data['macd']['1h'])}
 
-3. 技术指标多维度分析：
+布林带位置:
+- 日线: {market_data['bollinger_position']['1d']}%
+- 4小时: {market_data['bollinger_position']['4h']}%
+- 1小时: {market_data['bollinger_position']['1h']}%
 
-日线周期：
-- RSI: {technical_summary['日线']['RSI']}
-- MACD: {technical_summary['日线']['MACD']}
-- 布林带位置: {technical_summary['日线']['Bollinger']}%
-- MA趋势: {technical_summary['日线']['MA趋势']}
-- 价格位置: {technical_summary['日线']['价格位置']}
-- 30日价格区间: {technical_summary['日线']['30日低点']} - {technical_summary['日线']['30日高点']}
+价格趋势:
+{json.dumps(market_data['price_trends'], indent=2)}
 
-4小时周期：
-- RSI: {technical_summary['4小时']['RSI']}
-- MACD: {technical_summary['4小时']['MACD']}
-- 布林带位置: {technical_summary['4小时']['Bollinger']}%
-- MA趋势: {technical_summary['4小时']['MA趋势']}
-- 价格位置: {technical_summary['4小时']['价格位置']}
-- 7日价格区间: {technical_summary['4小时']['7日低点']} - {technical_summary['4小时']['7日高点']}
-
-1小时周期：
-- RSI: {technical_summary['1小时']['RSI']}
-- MACD: {technical_summary['1小时']['MACD']}
-- 布林带位置: {technical_summary['1小时']['Bollinger']}%
-- MA趋势: {technical_summary['1小时']['MA趋势']}
-- 价格位置: {technical_summary['1小时']['价格位置']}
-- 24小时价格区间: {technical_summary['1小时']['24小时低点']} - {technical_summary['1小时']['24小时高点']}
-
-请基于以上数据进行全面分析，并给出以下建议：
-1. 主要趋势判断（多个时间维度）
-2. 支撑位和阻力位（基于价格区间和技术指标）
-3. 建议的交易方向和具体策略
-4. 入场价格区间（基于技术指标和市场结构）
-5. 止损位（至少距离入场价2%以上）
-6. 止盈目标（基于支撑/阻力位，设置多个目标）
-7. 风险等级评估（1-5，考虑趋势背离、波动性等因素）
-8. 建议的持仓时间
-9. 需要特别注意的风险因素
-
-请确保建议具有实际操作价值，止损和止盈的设置要考虑市场波动性，不要过于保守。同时要充分考虑多个时间维度的趋势，确保交易方向与主趋势一致。
+{history_summary}
 """
-            return market_summary
+            return current_summary
         except Exception as e:
             logger.error(f"准备市场数据摘要时出错: {str(e)}", exc_info=True)
             raise
