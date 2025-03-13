@@ -6,6 +6,8 @@ from pathlib import Path
 import logging
 import numpy as np
 from typing import List, Union
+import asyncio
+# from services.trader.trading_system import TradingSystem
 
 # 添加项目根目录到 Python 路径
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -51,6 +53,23 @@ binance_client = Client(
 
 # 初始化 GPT 模型
 gpt_model = GPTModel(api_key=os.getenv('OPENAI_API_KEY'))
+
+trading_system = None
+
+def run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+# @app.before_first_request
+# def init_trading_system():
+#     global trading_system
+#     if trading_system is None:
+#         trading_system = TradingSystem()
+#         logger.info("Trading system initialized")
 
 def calculate_rsi(klines: List[List[Union[str, float]]], period: int = 14) -> Union[float, str]:
     """
@@ -173,6 +192,146 @@ def calculate_bollinger_position(klines: List[List[Union[str, float]]], period: 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/position')
+def position():
+    return render_template('position.html')
+
+@app.route('/strategy')
+def strategy():
+    return render_template('strategy.html')
+
+@app.route('/analysis')
+def analysis():
+    return render_template('analysis.html')
+
+@app.route('/settings')
+def settings():
+    return render_template('settings.html')
+
+@app.route('/api/system/status')
+def system_status():
+    """获取系统状态"""
+    try:
+        # 检查交易系统状态
+        system_ok = trading_system and trading_system.is_running()
+        # 检查数据连接状态
+        data_ok = trading_system and trading_system.check_data_connection()
+        # 检查交易连接状态
+        trade_ok = trading_system and trading_system.check_trade_connection()
+        
+        if not system_ok:
+            return jsonify({
+                "status": "error",
+                "message": "交易系统未运行"
+            })
+        elif not data_ok or not trade_ok:
+            return jsonify({
+                "status": "warning",
+                "message": "部分服务异常" + 
+                          (", 数据连接断开" if not data_ok else "") +
+                          (", 交易连接断开" if not trade_ok else "")
+            })
+        else:
+            return jsonify({
+                "status": "success",
+                "message": "系统正常运行"
+            })
+    except Exception as e:
+        logger.error(f"系统状态检查失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"系统状态检查失败: {str(e)}"
+        })
+
+@app.route('/api/positions')
+def get_positions():
+    """获取所有持仓信息"""
+    try:
+        positions = run_async(trading_system.get_positions())
+        return jsonify({
+            "status": "success",
+            "data": positions
+        })
+    except Exception as e:
+        logger.error(f"获取持仓信息失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
+
+@app.route('/api/positions/<int:position_id>', methods=['PUT'])
+def update_position(position_id):
+    """更新持仓信息"""
+    try:
+        data = request.get_json()
+        result = run_async(trading_system.update_position(
+            position_id,
+            stop_loss=data.get('stop_loss'),
+            take_profit=data.get('take_profit')
+        ))
+        return jsonify({
+            "status": "success",
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"更新持仓失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
+
+@app.route('/api/positions/<int:position_id>/close', methods=['POST'])
+def close_position(position_id):
+    """关闭持仓"""
+    try:
+        data = request.get_json()
+        result = run_async(trading_system.close_position(
+            position_id,
+            reason=data.get('reason', '手动平仓')
+        ))
+        return jsonify({
+            "status": "success",
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"关闭持仓失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
+
+@app.route('/api/portfolio')
+def get_portfolio():
+    """获取投资组合信息"""
+    try:
+        portfolio = run_async(trading_system.get_portfolio())
+        return jsonify({
+            "status": "success",
+            "data": portfolio
+        })
+    except Exception as e:
+        logger.error(f"获取投资组合信息失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
+
+@app.route('/api/trade_history')
+def get_trade_history():
+    """获取交易历史"""
+    try:
+        history = run_async(trading_system.get_trade_history())
+        return jsonify({
+            "status": "success",
+            "data": history
+        })
+    except Exception as e:
+        logger.error(f"获取交易历史失败: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        })
 
 @app.route('/api/balance', methods=['GET'])
 def get_balance():
@@ -298,14 +457,10 @@ def get_market_analysis():
         }
         
         # 使用 GPT 模型分析市场
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        analysis_result = loop.run_until_complete(gpt_model.analyze_market(market_data))
+        analysis_result = run_async(gpt_model.analyze_market(market_data))
         
         # 生成交易策略
-        strategy = loop.run_until_complete(gpt_model.generate_strategy(analysis_result))
-        loop.close()
+        strategy = run_async(gpt_model.generate_strategy(analysis_result))
         
         return jsonify({
             'success': True,
@@ -548,4 +703,8 @@ def get_market_data():
         }), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    # 允许局域网访问，设置host为0.0.0.0
+    host = '0.0.0.0'
+    port = 5000
+    logger.info(f"服务器将在 {host}:{port} 启动，允许局域网访问")
+    app.run(debug=True, host=host, port=port) 

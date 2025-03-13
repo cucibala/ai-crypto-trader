@@ -5,7 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BTC-USDT 交易助手</title>
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.7.2/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
+        /* 导航栏样式 */
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
+        .nav-link {
+            padding: 0.5rem 1rem;
+            font-size: 0.95rem;
+        }
+        .nav-link i {
+            margin-right: 5px;
+        }
+        .nav-link.active {
+            font-weight: 600;
+            position: relative;
+        }
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 1rem;
+            right: 1rem;
+            height: 2px;
+            background-color: #fff;
+        }
+        #system-status {
+            display: flex;
+            align-items: center;
+        }
+        #system-status i {
+            margin-right: 6px;
+            font-size: 0.75rem;
+        }
+        .breadcrumb {
+            margin-bottom: 0;
+            padding: 0.5rem 0;
+        }
+        .breadcrumb-item i {
+            margin-right: 5px;
+            font-size: 0.9rem;
+        }
+        .breadcrumb-item a:hover {
+            color: #0056b3;
+        }
+
         .market-data {
             background-color: #f8f9fa;
             padding: 15px;
@@ -63,7 +113,63 @@
     </style>
 </head>
 <body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">BTC-USDT 交易助手</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">
+                            <i class="bi bi-house-door"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/position">
+                            <i class="bi bi-graph-up"></i> 仓位管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/strategy">
+                            <i class="bi bi-gear"></i> 策略配置
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analysis">
+                            <i class="bi bi-bar-chart"></i> 市场分析
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">
+                            <i class="bi bi-sliders"></i> 系统设置
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="system-status">
+                            <i class="bi bi-circle-fill text-success"></i> 系统正常
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
     <div class="container mt-4">
+        <!-- 面包屑导航 -->
+        <nav aria-label="breadcrumb" class="bg-light p-2 rounded mb-4">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item active">
+                    <i class="bi bi-house-door"></i>
+                    首页
+                </li>
+            </ol>
+        </nav>
+
         <h1 class="mb-4">BTC-USDT 交易助手</h1>
         
         <!-- 账户信息 -->

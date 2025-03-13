@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仓位管理 - BTC-USDT 交易助手</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.7.2/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        /* 导航栏样式 */
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
+        .nav-link {
+            padding: 0.5rem 1rem;
+            font-size: 0.95rem;
+        }
+        .nav-link i {
+            margin-right: 5px;
+        }
+        .nav-link.active {
+            font-weight: 600;
+            position: relative;
+        }
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 1rem;
+            right: 1rem;
+            height: 2px;
+            background-color: #fff;
+        }
+        #system-status {
+            display: flex;
+            align-items: center;
+        }
+        #system-status i {
+            margin-right: 6px;
+            font-size: 0.75rem;
+        }
+        .breadcrumb {
+            margin-bottom: 0;
+            padding: 0.5rem 0;
+        }
+        .breadcrumb-item i {
+            margin-right: 5px;
+            font-size: 0.9rem;
+        }
+        .breadcrumb-item a:hover {
+            color: #0056b3;
+        }
+        
+        /* 现有样式保持不变 */
+        .position-management {
+            margin-top: 20px;
+        }
+        .portfolio-item {
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .portfolio-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .portfolio-item h6 {
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        .portfolio-item p {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 0;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .position-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .d-flex.gap-2 {
+            gap: 0.5rem !important;
+        }
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        .profit {
+            color: #28a745;
+        }
+        .loss {
+            color: #dc3545;
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        .position-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .position-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .chart-container {
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        .stats-card {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .loading {
+            position: relative;
+            min-height: 200px;
+        }
+        .loading::after {
+            content: "加载中...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">BTC-USDT 交易助手</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-house-door"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/position">
+                            <i class="bi bi-graph-up"></i> 仓位管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/strategy">
+                            <i class="bi bi-gear"></i> 策略配置
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analysis">
+                            <i class="bi bi-bar-chart"></i> 市场分析
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">
+                            <i class="bi bi-sliders"></i> 系统设置
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="system-status">
+                            <i class="bi bi-circle-fill text-success"></i> 系统正常
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- 面包屑导航 -->
+        <nav aria-label="breadcrumb" class="bg-light p-2 rounded mb-4">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item">
+                    <i class="bi bi-house-door"></i>
+                    <a href="/" class="text-decoration-none">首页</a>
+                </li>
+                <li class="breadcrumb-item active">
+                    <i class="bi bi-graph-up"></i>
+                    仓位管理
+                </li>
+            </ol>
+        </nav>
+
+        <!-- 投资组合摘要 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="portfolio-item">
+                    <h6>总资产价值</h6>
+                    <p id="portfolio-total-value">加载中...</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="portfolio-item">
+                    <h6>可用余额</h6>
+                    <p id="portfolio-cash-balance">加载中...</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="portfolio-item">
+                    <h6>持仓市值</h6>
+                    <p id="portfolio-invested-value">加载中...</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="portfolio-item">
+                    <h6>总收益率</h6>
+                    <p id="portfolio-total-pnl">加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 仓位管理主区域 -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">当前持仓</h5>
+                        <button id="refresh-positions-btn" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="positions-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>交易对</th>
+                                        <th>方向</th>
+                                        <th>数量</th>
+                                        <th>开仓价</th>
+                                        <th>当前价</th>
+                                        <th>止损价</th>
+                                        <th>止盈价</th>
+                                        <th>未实现盈亏</th>
+                                        <th>仓位占比</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- 仓位数据将通过JavaScript动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 历史交易记录 -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">历史交易记录</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="trade-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>交易对</th>
+                                        <th>方向</th>
+                                        <th>数量</th>
+                                        <th>开仓价</th>
+                                        <th>平仓价</th>
+                                        <th>实现盈亏</th>
+                                        <th>持仓时间</th>
+                                        <th>平仓原因</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- 历史交易数据将通过JavaScript动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改仓位模态框 -->
+    <div class="modal fade" id="editPositionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改仓位</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-position-id">
+                    <div class="mb-3">
+                        <label for="edit-stop-loss" class="form-label">止损价格</label>
+                        <input type="number" class="form-control" id="edit-stop-loss" step="0.01">
+                        <div class="form-text text-muted">建议止损距离不要小于2%</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-take-profit" class="form-label">止盈价格</label>
+                        <input type="number" class="form-control" id="edit-take-profit" step="0.01">
+                        <div class="form-text text-muted">建议止盈距离不要小于4%</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="save-position-btn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认平仓模态框 -->
+    <div class="modal fade" id="closePositionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认平仓</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="close-position-id">
+                    <p>确定要平掉这个仓位吗？</p>
+                    <div class="position-info">
+                        <p>交易对: <span id="close-symbol"></span></p>
+                        <p>开仓价: <span id="close-entry-price"></span></p>
+                        <p>当前价: <span id="close-current-price"></span></p>
+                        <p>预计盈亏: <span id="close-pnl"></span></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirm-close-btn">确认平仓</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 系统状态检查
+        function checkSystemStatus() {
+            $.get('/api/system/status', function(response) {
+                const statusIcon = $('#system-status i');
+                const statusText = $('#system-status');
+                
+                if (response.status === 'success') {
+                    statusIcon.removeClass('text-warning text-danger').addClass('text-success');
+                    statusText.html('<i class="bi bi-circle-fill text-success"></i> 系统正常');
+                } else if (response.status === 'warning') {
+                    statusIcon.removeClass('text-success text-danger').addClass('text-warning');
+                    statusText.html('<i class="bi bi-circle-fill text-warning"></i> 系统警告');
+                } else {
+                    statusIcon.removeClass('text-success text-warning').addClass('text-danger');
+                    statusText.html('<i class="bi bi-circle-fill text-danger"></i> 系统异常');
+                }
+            }).fail(function() {
+                const statusIcon = $('#system-status i');
+                const statusText = $('#system-status');
+                statusIcon.removeClass('text-success text-warning').addClass('text-danger');
+                statusText.html('<i class="bi bi-circle-fill text-danger"></i> 连接断开');
+            });
+        }
+
+        // 更新仓位列表
+        function updatePositions() {
+            $.get('/api/positions', function(response) {
+                if (response.status === 'success') {
+                    const positions = response.data;
+                    const tbody = $('#positions-table tbody').empty();
+                    
+                    positions.forEach(position => {
+                        const tr = $('<tr>');
+                        tr.append(`<td>${position.id}</td>`);
+                        tr.append(`<td>${position.symbol}</td>`);
+                        tr.append(`<td class="${position.entry_price > 0 ? 'text-success' : 'text-danger'}">${position.entry_price > 0 ? '多' : '空'}</td>`);
+                        tr.append(`<td>${position.quantity}</td>`);
+                        tr.append(`<td>${position.entry_price}</td>`);
+                        tr.append(`<td>${position.current_price}</td>`);
+                        tr.append(`<td>${position.stop_loss || '-'}</td>`);
+                        tr.append(`<td>${position.take_profit || '-'}</td>`);
+                        tr.append(`<td class="${position.unrealized_pnl_percent >= 0 ? 'text-success' : 'text-danger'}">${position.unrealized_pnl_percent.toFixed(2)}%</td>`);
+                        tr.append(`<td>${position.position_size_percent.toFixed(2)}%</td>`);
+                        
+                        // 操作按钮
+                        const actions = $('<td>').addClass('d-flex gap-2');
+                        actions.append(`
+                            <button class="btn btn-sm btn-outline-primary edit-position-btn"
+                                    data-position-id="${position.id}"
+                                    data-stop-loss="${position.stop_loss || ''}"
+                                    data-take-profit="${position.take_profit || ''}">
+                                修改
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger close-position-btn"
+                                    data-position-id="${position.id}"
+                                    data-symbol="${position.symbol}"
+                                    data-entry-price="${position.entry_price}"
+                                    data-current-price="${position.current_price}"
+                                    data-pnl="${position.unrealized_pnl_percent}">
+                                平仓
+                            </button>
+                        `);
+                        tr.append(actions);
+                        
+                        tbody.append(tr);
+                    });
+                }
+            });
+        }
+
+        // 更新投资组合摘要
+        function updatePortfolio() {
+            $.get('/api/portfolio', function(response) {
+                if (response.status === 'success') {
+                    const portfolio = response.data;
+                    
+                    $('#portfolio-total-value').text(portfolio.total_value.toFixed(2) + ' USDT');
+                    $('#portfolio-cash-balance').text(portfolio.cash_balance.toFixed(2) + ' USDT');
+                    $('#portfolio-invested-value').text(portfolio.invested_value.toFixed(2) + ' USDT');
+                    
+                    const pnlElement = $('#portfolio-total-pnl');
+                    pnlElement.text(portfolio.total_pnl_percent.toFixed(2) + '%')
+                        .removeClass('text-success text-danger')
+                        .addClass(portfolio.total_pnl_percent >= 0 ? 'text-success' : 'text-danger');
+                }
+            });
+        }
+
+        // 更新历史交易记录
+        function updateTradeHistory() {
+            $.get('/api/trade_history', function(response) {
+                if (response.status === 'success') {
+                    const history = response.data;
+                    const tbody = $('#trade-history-table tbody').empty();
+                    
+                    history.forEach(trade => {
+                        const tr = $('<tr>');
+                        tr.append(`<td>${new Date(trade.close_time).toLocaleString()}</td>`);
+                        tr.append(`<td>${trade.symbol}</td>`);
+                        tr.append(`<td class="${trade.side === 'BUY' ? 'text-success' : 'text-danger'}">${trade.side}</td>`);
+                        tr.append(`<td>${trade.quantity}</td>`);
+                        tr.append(`<td>${trade.entry_price}</td>`);
+                        tr.append(`<td>${trade.close_price}</td>`);
+                        tr.append(`<td class="${trade.realized_pnl >= 0 ? 'text-success' : 'text-danger'}">${trade.realized_pnl.toFixed(2)}%</td>`);
+                        tr.append(`<td>${trade.holding_period}</td>`);
+                        tr.append(`<td>${trade.close_reason}</td>`);
+                        tbody.append(tr);
+                    });
+                }
+            });
+        }
+
+        // 页面加载完成后执行
+        $(document).ready(function() {
+            // 初始加载
+            updatePositions();
+            updatePortfolio();
+            updateTradeHistory();
+            checkSystemStatus();  // 检查系统状态
+            
+            // 定时更新（每30秒）
+            setInterval(function() {
+                updatePositions();
+                updatePortfolio();
+                checkSystemStatus();  // 定时检查系统状态
+            }, 30000);
+
+            // 系统状态点击事件
+            $('#system-status').click(function(e) {
+                e.preventDefault();
+                checkSystemStatus();
+            });
+
+            // 刷新按钮点击事件
+            $('#refresh-positions-btn').click(function() {
+                updatePositions();
+                updatePortfolio();
+            });
+
+            // 修改仓位按钮点击事件
+            $(document).on('click', '.edit-position-btn', function() {
+                const positionId = $(this).data('position-id');
+                const stopLoss = $(this).data('stop-loss');
+                const takeProfit = $(this).data('take-profit');
+                
+                $('#edit-position-id').val(positionId);
+                $('#edit-stop-loss').val(stopLoss);
+                $('#edit-take-profit').val(takeProfit);
+                
+                new bootstrap.Modal(document.getElementById('editPositionModal')).show();
+            });
+
+            // 保存仓位修改
+            $('#save-position-btn').click(function() {
+                const positionId = $('#edit-position-id').val();
+                const stopLoss = $('#edit-stop-loss').val();
+                const takeProfit = $('#edit-take-profit').val();
+                
+                $.ajax({
+                    url: `/api/positions/${positionId}`,
+                    method: 'PUT',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        stop_loss: parseFloat(stopLoss),
+                        take_profit: parseFloat(takeProfit)
+                    }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            alert('仓位更新成功');
+                            $('#editPositionModal').modal('hide');
+                            updatePositions();
+                        } else {
+                            alert('更新失败：' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('更新请求失败：' + error);
+                    }
+                });
+            });
+
+            // 平仓按钮点击事件
+            $(document).on('click', '.close-position-btn', function() {
+                const positionId = $(this).data('position-id');
+                const symbol = $(this).data('symbol');
+                const entryPrice = $(this).data('entry-price');
+                const currentPrice = $(this).data('current-price');
+                const pnl = $(this).data('pnl');
+                
+                $('#close-position-id').val(positionId);
+                $('#close-symbol').text(symbol);
+                $('#close-entry-price').text(entryPrice);
+                $('#close-current-price').text(currentPrice);
+                $('#close-pnl').text(pnl + '%')
+                    .removeClass('text-success text-danger')
+                    .addClass(pnl >= 0 ? 'text-success' : 'text-danger');
+                
+                new bootstrap.Modal(document.getElementById('closePositionModal')).show();
+            });
+
+            // 确认平仓
+            $('#confirm-close-btn').click(function() {
+                const positionId = $('#close-position-id').val();
+                
+                $.ajax({
+                    url: `/api/positions/${positionId}/close`,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        reason: '手动平仓'
+                    }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            alert('平仓成功');
+                            $('#closePositionModal').modal('hide');
+                            updatePositions();
+                            updatePortfolio();
+                            updateTradeHistory();
+                        } else {
+                            alert('平仓失败：' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('平仓请求失败：' + error);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
