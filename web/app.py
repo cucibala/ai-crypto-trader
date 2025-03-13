@@ -376,5 +376,176 @@ def execute_trade():
         'order_id': '123456789'
     })
 
+@app.route('/api/place_order', methods=['POST'])
+def place_order():
+    try:
+        order_data = request.get_json()
+        logger.info(f"收到下单请求: {order_data}")
+        
+        # 验证订单数据
+        required_fields = ['symbol', 'side', 'type', 'price', 'quantity', 'stopLoss', 'takeProfit']
+        for field in required_fields:
+            if field not in order_data:
+                return jsonify({
+                    'success': False,
+                    'message': f'缺少必要字段: {field}'
+                }), 400
+        
+        # 获取当前价格进行验证
+        ticker = binance_client.get_symbol_ticker(symbol=order_data['symbol'])
+        current_price = float(ticker['price'])
+        
+        # 计算价格偏差百分比
+        price_deviation = abs(float(order_data['price']) - current_price) / current_price * 100
+        
+        # 如果价格偏差超过2%，拒绝下单
+        if price_deviation > 2:
+            return jsonify({
+                'success': False,
+                'message': f'当前市价与建议入场价格偏差过大 ({price_deviation:.2f}%)，为保护您的资金安全，已取消下单'
+            }), 400
+            
+        # 创建限价单
+        try:
+            # 创建主订单
+            order = binance_client.create_order(
+                symbol=order_data['symbol'],
+                side=order_data['side'],
+                type=order_data['type'],
+                timeInForce='GTC',
+                quantity=order_data['quantity'],
+                price=order_data['price']
+            )
+            
+            # 如果主订单创建成功，添加止损单
+            if order['orderId']:
+                stop_loss_order = binance_client.create_order(
+                    symbol=order_data['symbol'],
+                    side='SELL' if order_data['side'] == 'BUY' else 'BUY',
+                    type='STOP_LOSS_LIMIT',
+                    timeInForce='GTC',
+                    quantity=order_data['quantity'],
+                    stopPrice=order_data['stopLoss'],
+                    price=order_data['stopLoss']
+                )
+                
+                # 添加止盈单
+                take_profit_order = binance_client.create_order(
+                    symbol=order_data['symbol'],
+                    side='SELL' if order_data['side'] == 'BUY' else 'BUY',
+                    type='LIMIT',
+                    timeInForce='GTC',
+                    quantity=order_data['quantity'],
+                    price=order_data['takeProfit']
+                )
+                
+                logger.info(f"下单成功 - 订单ID: {order['orderId']}, 止损单ID: {stop_loss_order['orderId']}, 止盈单ID: {take_profit_order['orderId']}")
+                
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'orderId': order['orderId'],
+                        'stopLossOrderId': stop_loss_order['orderId'],
+                        'takeProfitOrderId': take_profit_order['orderId']
+                    },
+                    'message': '下单成功'
+                })
+                
+        except Exception as e:
+            logger.error(f"下单失败: {str(e)}", exc_info=True)
+            return jsonify({
+                'success': False,
+                'message': f'下单失败: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"处理下单请求时出错: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': f'系统错误: {str(e)}'
+        }), 500
+
+@app.route('/api/market_data', methods=['GET'])
+def get_market_data():
+    try:
+        # 获取市场数据
+        ticker = binance_client.get_symbol_ticker(symbol="BTCUSDT")
+        ticker_24h = binance_client.get_ticker(symbol='BTCUSDT')
+        depth = binance_client.get_order_book(symbol='BTCUSDT')
+        
+        # 获取K线数据
+        klines_1d = binance_client.get_klines(
+            symbol="BTCUSDT", 
+            interval=Client.KLINE_INTERVAL_1DAY,
+            limit=90
+        )
+        
+        klines_4h = binance_client.get_klines(
+            symbol="BTCUSDT", 
+            interval=Client.KLINE_INTERVAL_4HOUR,
+            limit=120
+        )
+        
+        klines_1h = binance_client.get_klines(
+            symbol="BTCUSDT", 
+            interval=Client.KLINE_INTERVAL_1HOUR,
+            limit=168
+        )
+        
+        # 计算技术指标
+        rsi_values = {
+            '1d': calculate_rsi(klines_1d),
+            '4h': calculate_rsi(klines_4h),
+            '1h': calculate_rsi(klines_1h)
+        }
+        
+        macd_values = {
+            '1d': calculate_macd(klines_1d),
+            '4h': calculate_macd(klines_4h),
+            '1h': calculate_macd(klines_1h)
+        }
+        
+        bollinger_values = {
+            '1d': calculate_bollinger_position(klines_1d),
+            '4h': calculate_bollinger_position(klines_4h),
+            '1h': calculate_bollinger_position(klines_1h)
+        }
+        
+        # 计算价格趋势
+        price_trends = calculate_price_trends(klines_1d, klines_4h, klines_1h)
+        
+        # 计算成交量变化
+        current_volume = float(ticker_24h['volume'])
+        previous_volume = float(klines_1d[-2][5]) if len(klines_1d) >= 2 else current_volume
+        volume_change_24h = ((current_volume - previous_volume) / previous_volume * 100) if previous_volume > 0 else 0
+        
+        market_data = {
+            'symbol': 'BTCUSDT',
+            'price': float(ticker['price']),
+            'price_change_24h': float(ticker_24h['priceChangePercent']),
+            'volume_24h': current_volume,
+            'quote_volume': float(ticker_24h['quoteVolume']),
+            'base_volume': current_volume,
+            'volume_change_24h': round(volume_change_24h, 2),
+            'buy_volume': sum(float(bid[1]) for bid in depth['bids'][:10]),
+            'sell_volume': sum(float(ask[1]) for ask in depth['asks'][:10]),
+            'rsi': rsi_values,
+            'macd': macd_values,
+            'bollinger_position': bollinger_values,
+            'price_trends': price_trends
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': market_data
+        })
+        
+    except Exception as e:
+        logger.error(f"获取市场数据失败: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000) 

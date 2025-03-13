@@ -80,16 +80,14 @@
             <h3>市场数据</h3>
             <div class="market-data" id="market-info">
                 <div class="row">
-                    <div class="col-md-6">
-                        <h4>价格信息</h4>
+                    <div class="col-md-12">
+                        <h4>市场数据</h4>
                         <p>当前价格: <span id="current-price">加载中...</span> USDT</p>
-                        <p>24h 价格变化: <span id="price-change">加载中...</span></p>
-                    </div>
-                    <div class="col-md-6">
-                        <h4>成交量信息</h4>
+                        <p>24h 涨跌幅: <span id="price-change">加载中...</span></p>
                         <p>24h 成交量: <span id="volume-24h">加载中...</span> BTC</p>
                         <p>成交量变化: <span id="volume-change">加载中...</span></p>
                         <p>24h 成交额: <span id="quote-volume">加载中...</span> USDT</p>
+                        <p class="text-muted small">最后更新时间: <span id="last-refresh-time">-</span></p>
                     </div>
                 </div>
                 <div class="row mt-3">
@@ -143,6 +141,12 @@
                         <p>入场价格: <span id="entry-price">加载中...</span></p>
                         <p>止损价格: <span id="stop-loss">加载中...</span></p>
                         <p>止盈价格: <span id="take-profit">加载中...</span></p>
+                        <p class="text-muted small">策略更新时间: <span id="strategy-refresh-time">-</span></p>
+                        <div class="mt-3">
+                            <button id="place-order-btn" class="btn btn-primary" style="display: none;">
+                                一键下单
+                            </button>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <h4>风险管理</h4>
@@ -165,8 +169,45 @@
         </div>
     </div>
 
+    <!-- 添加下单确认模态框 -->
+    <div class="modal fade" id="orderConfirmModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认下单</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="order-details">
+                        <p>交易对: <span id="modal-symbol">BTCUSDT</span></p>
+                        <p>方向: <span id="modal-action" class="fw-bold"></span></p>
+                        <p>入场价格: <span id="modal-entry-price"></span> USDT</p>
+                        <p>止损价格: <span id="modal-stop-loss"></span> USDT</p>
+                        <p>止盈价格: <span id="modal-take-profit"></span> USDT</p>
+                        <p>仓位大小: <span id="modal-position-size"></span></p>
+                    </div>
+                    <div class="alert alert-warning mt-3">
+                        <strong>风险提示：</strong>
+                        <ul>
+                            <li>请确保您已充分了解交易风险</li>
+                            <li>建议仅使用不超过总资金20%的资金进行单次交易</li>
+                            <li>市场波动可能导致实际成交价格与建议价格有所差异</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-order-btn">确认下单</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
     <script>
+        let currentStrategy = null; // 存储当前策略
+
         function updateMarketData() {
             $.get('/api/market_analysis', function(response) {
                 if (response.success) {
@@ -176,75 +217,102 @@
                     const strategy = data.strategy;
 
                     // 更新市场数据
-                    $('#current-price').text(market_data.price.toFixed(2));
-                    $('#price-change').text(market_data.price_change_24h.toFixed(2) + '%')
+                    $('#current-price').text(market_data.price ? market_data.price.toFixed(2) : 'N/A');
+                    $('#price-change').text(market_data.price_change_24h ? market_data.price_change_24h.toFixed(2) + '%' : 'N/A')
+                        .removeClass('bullish bearish')
                         .addClass(market_data.price_change_24h >= 0 ? 'bullish' : 'bearish');
-                    $('#volume-24h').text(market_data.volume_24h.toFixed(2));
-                    $('#volume-change').text(market_data.volume_change_24h.toFixed(2) + '%')
+                    $('#volume-24h').text(market_data.volume_24h ? market_data.volume_24h.toFixed(2) : 'N/A');
+                    $('#volume-change').text(market_data.volume_change_24h ? market_data.volume_change_24h.toFixed(2) + '%' : 'N/A')
+                        .removeClass('bullish bearish')
                         .addClass(market_data.volume_change_24h >= 0 ? 'bullish' : 'bearish');
-                    $('#quote-volume').text((market_data.quote_volume / 1000000).toFixed(2) + 'M');
+                    $('#quote-volume').text(market_data.quote_volume ? (market_data.quote_volume / 1000000).toFixed(2) + 'M' : 'N/A');
 
                     // 更新技术指标
-                    $('#rsi-value').text(market_data.rsi);
-                    if (market_data.macd !== 'N/A') {
-                        $('#macd-value').text(
-                            `${market_data.macd.macd.toFixed(2)} (Signal: ${market_data.macd.signal.toFixed(2)})`
-                        );
-                    } else {
-                        $('#macd-value').text('N/A');
-                    }
-                    $('#bollinger-value').text(
-                        market_data.bollinger_position !== 'N/A' 
-                            ? market_data.bollinger_position.toFixed(2) + '%' 
-                            : 'N/A'
-                    );
+                    // 处理多时间维度的RSI
+                    const rsiText = market_data.rsi ? 
+                        `1D: ${market_data.rsi['1d'] || 'N/A'}, 4H: ${market_data.rsi['4h'] || 'N/A'}, 1H: ${market_data.rsi['1h'] || 'N/A'}` : 
+                        'N/A';
+                    $('#rsi-value').text(rsiText);
+
+                    // 处理多时间维度的MACD
+                    const macdText = market_data.macd ? 
+                        `1D: ${formatMacd(market_data.macd['1d'])}, 4H: ${formatMacd(market_data.macd['4h'])}, 1H: ${formatMacd(market_data.macd['1h'])}` : 
+                        'N/A';
+                    $('#macd-value').text(macdText);
+
+                    // 处理多时间维度的布林带位置
+                    const bpText = market_data.bollinger_position ? 
+                        `1D: ${formatNumber(market_data.bollinger_position['1d'])}%, 4H: ${formatNumber(market_data.bollinger_position['4h'])}%, 1H: ${formatNumber(market_data.bollinger_position['1h'])}%` : 
+                        'N/A';
+                    $('#bollinger-value').text(bpText);
 
                     // 更新市场分析
                     if (analysis && analysis.analysis) {
                         const marketAnalysis = analysis.analysis;
-                        $('#market-trend').text(marketAnalysis.trend)
+                        $('#market-trend').text(marketAnalysis.trend || 'N/A')
                             .removeClass('bullish bearish neutral')
-                            .addClass(marketAnalysis.trend.toLowerCase());
-                        $('#support-levels').text(marketAnalysis.support_levels.join(', '));
-                        $('#resistance-levels').text(marketAnalysis.resistance_levels.join(', '));
+                            .addClass(marketAnalysis.trend ? marketAnalysis.trend.toLowerCase() : 'neutral');
+                        $('#support-levels').text(marketAnalysis.support_levels ? marketAnalysis.support_levels.join(', ') : 'N/A');
+                        $('#resistance-levels').text(marketAnalysis.resistance_levels ? marketAnalysis.resistance_levels.join(', ') : 'N/A');
                         
                         // 成交量分析
-                        $('#volume-trend').text(marketAnalysis.volume_analysis.volume_trend);
-                        $('#volume-conclusion').text(marketAnalysis.volume_analysis.volume_conclusion);
+                        if (marketAnalysis.volume_analysis) {
+                            $('#volume-trend').text(marketAnalysis.volume_analysis.volume_trend || 'N/A');
+                            $('#volume-conclusion').text(marketAnalysis.volume_analysis.volume_conclusion || 'N/A');
+                        }
                         
                         // 技术指标分析
-                        $('#rsi-analysis').text(marketAnalysis.technical_indicators.rsi_analysis);
-                        $('#macd-analysis').text(marketAnalysis.technical_indicators.macd_analysis);
-                        $('#bollinger-analysis').text(marketAnalysis.technical_indicators.bollinger_analysis);
+                        if (marketAnalysis.technical_indicators) {
+                            $('#rsi-analysis').text(marketAnalysis.technical_indicators.rsi_analysis || 'N/A');
+                            $('#macd-analysis').text(marketAnalysis.technical_indicators.macd_analysis || 'N/A');
+                            $('#bollinger-analysis').text(marketAnalysis.technical_indicators.bollinger_analysis || 'N/A');
+                        }
                         
                         // 市场情绪
-                        $('#market-sentiment').text(marketAnalysis.market_sentiment);
-                        $('#analysis-confidence').text((marketAnalysis.confidence * 100).toFixed(2) + '%');
+                        $('#market-sentiment').text(marketAnalysis.market_sentiment || 'N/A');
+                        $('#analysis-confidence').text(marketAnalysis.confidence ? 
+                            (marketAnalysis.confidence * 100).toFixed(2) + '%' : 'N/A');
                     }
 
                     // 更新交易策略
                     if (strategy && strategy.strategy) {
+                        currentStrategy = strategy.strategy; // 保存当前策略
                         const tradingStrategy = strategy.strategy;
-                        $('#trade-action').text(tradingStrategy.action.toUpperCase())
+                        $('#trade-action').text((tradingStrategy.action || 'UNKNOWN').toUpperCase())
                             .removeClass('bullish bearish neutral')
                             .addClass(tradingStrategy.action === 'buy' ? 'bullish' : 
                                     tradingStrategy.action === 'sell' ? 'bearish' : 'neutral');
-                        $('#entry-price').text(tradingStrategy.entry_price);
-                        $('#stop-loss').text(tradingStrategy.stop_loss);
-                        $('#take-profit').text(tradingStrategy.take_profit);
-                        $('#risk-level').text(tradingStrategy.risk_level)
+                        $('#entry-price').text(tradingStrategy.entry_price || 'N/A');
+                        $('#stop-loss').text(tradingStrategy.stop_loss || 'N/A');
+                        $('#take-profit').text(tradingStrategy.take_profit || 'N/A');
+                        $('#risk-level').text(tradingStrategy.risk_level || 'N/A')
                             .removeClass('risk-1 risk-2 risk-3 risk-4 risk-5')
-                            .addClass('risk-' + tradingStrategy.risk_level);
-                        $('#position-size').text(tradingStrategy.position_size);
-                        $('#time-frame').text(tradingStrategy.time_frame);
+                            .addClass(tradingStrategy.risk_level ? 'risk-' + tradingStrategy.risk_level : '');
+                        $('#position-size').text(tradingStrategy.position_size || 'N/A');
+                        $('#time-frame').text(tradingStrategy.time_frame || 'N/A');
                         
                         // 更新执行条件
                         const conditionsList = $('#strategy-conditions').empty();
-                        tradingStrategy.conditions.forEach(condition => {
-                            conditionsList.append(`<li>${condition}</li>`);
-                        });
+                        if (tradingStrategy.conditions && Array.isArray(tradingStrategy.conditions)) {
+                            tradingStrategy.conditions.forEach(condition => {
+                                conditionsList.append(`<li>${condition}</li>`);
+                            });
+                        } else {
+                            conditionsList.append('<li>暂无执行条件</li>');
+                        }
                         
-                        $('#strategy-reasoning').text(tradingStrategy.reasoning);
+                        $('#strategy-reasoning').text(tradingStrategy.reasoning || 'N/A');
+
+                        // 显示或隐藏下单按钮
+                        const orderBtn = $('#place-order-btn');
+                        if (tradingStrategy.action && tradingStrategy.action !== 'hold') {
+                            orderBtn.show()
+                                .removeClass('btn-success btn-danger')
+                                .addClass(tradingStrategy.action === 'buy' ? 'btn-success' : 'btn-danger')
+                                .text(`一键${tradingStrategy.action === 'buy' ? '买入' : '卖出'}`);
+                        } else {
+                            orderBtn.hide();
+                        }
                     }
                 }
             });
@@ -253,22 +321,139 @@
         // 更新账户余额
         function updateBalance() {
             $.get('/api/balance', function(response) {
-                if (response.success) {
-                    $('#btc-balance').text(response.data.btc_balance.toFixed(8));
-                    $('#usdt-balance').text(response.data.usdt_balance.toFixed(2));
+                if (response.success && response.data) {
+                    $('#btc-balance').text(response.data.btc_balance ? response.data.btc_balance.toFixed(8) : 'N/A');
+                    $('#usdt-balance').text(response.data.usdt_balance ? response.data.usdt_balance.toFixed(2) : 'N/A');
                 }
             });
         }
 
+        // 格式化数字的辅助函数
+        function formatNumber(value) {
+            return value !== undefined && value !== null ? Number(value).toFixed(2) : 'N/A';
+        }
+
+        // 格式化MACD的辅助函数
+        function formatMacd(macd) {
+            if (!macd) return 'N/A';
+            return `${formatNumber(macd.macd)} (${formatNumber(macd.signal)})`;
+        }
+
+        // 处理下单按钮点击
+        $('#place-order-btn').click(function() {
+            if (!currentStrategy) return;
+            
+            // 更新模态框中的订单信息
+            $('#modal-action').text(currentStrategy.action === 'buy' ? '买入' : '卖出')
+                .removeClass('text-success text-danger')
+                .addClass(currentStrategy.action === 'buy' ? 'text-success' : 'text-danger');
+            $('#modal-entry-price').text(currentStrategy.entry_price);
+            $('#modal-stop-loss').text(currentStrategy.stop_loss);
+            $('#modal-take-profit').text(currentStrategy.take_profit);
+            $('#modal-position-size').text(currentStrategy.position_size);
+            
+            // 显示确认模态框
+            new bootstrap.Modal(document.getElementById('orderConfirmModal')).show();
+        });
+
+        // 处理确认下单按钮点击
+        $('#confirm-order-btn').click(function() {
+            if (!currentStrategy) return;
+            
+            const orderData = {
+                symbol: 'BTCUSDT',
+                side: currentStrategy.action.toUpperCase(),
+                type: 'LIMIT',
+                price: currentStrategy.entry_price,
+                quantity: currentStrategy.position_size,
+                stopLoss: currentStrategy.stop_loss,
+                takeProfit: currentStrategy.take_profit
+            };
+            
+            // 发送下单请求
+            $.ajax({
+                url: '/api/place_order',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(orderData),
+                success: function(response) {
+                    if (response.success) {
+                        alert('下单成功！订单ID: ' + response.data.orderId);
+                        $('#orderConfirmModal').modal('hide');
+                        // 刷新账户余额
+                        updateBalance();
+                    } else {
+                        alert('下单失败：' + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('下单请求失败：' + error);
+                }
+            });
+        });
+
         // 页面加载完成后执行
         $(document).ready(function() {
+            // 初始加载
             updateBalance();
             updateMarketData();
-            // 每60秒更新一次数据
+            
+            // 市场数据每1分钟更新一次
             setInterval(function() {
                 updateBalance();
-                updateMarketData();
+                // 只更新市场数据部分
+                $.get('/api/market_data', function(response) {
+                    if (response.success) {
+                        const market_data = response.data;
+                        updateMarketDataUI(market_data);
+                    }
+                });
             }, 60000);
+            
+            // 策略分析每30分钟更新一次
+            setInterval(function() {
+                // 完整更新，包括市场分析和策略
+                updateMarketData();
+            }, 1800000);  // 30分钟 = 1800000毫秒
+            
+            // 添加最后更新时间显示
+            function updateLastRefreshTime() {
+                const now = new Date();
+                $('#last-refresh-time').text(now.toLocaleTimeString());
+            }
+            
+            // 更新市场数据UI的函数
+            function updateMarketDataUI(market_data) {
+                // 更新市场数据
+                $('#current-price').text(market_data.price ? market_data.price.toFixed(2) : 'N/A');
+                $('#price-change').text(market_data.price_change_24h ? market_data.price_change_24h.toFixed(2) + '%' : 'N/A')
+                    .removeClass('bullish bearish')
+                    .addClass(market_data.price_change_24h >= 0 ? 'bullish' : 'bearish');
+                $('#volume-24h').text(market_data.volume_24h ? market_data.volume_24h.toFixed(2) : 'N/A');
+                $('#volume-change').text(market_data.volume_change_24h ? market_data.volume_change_24h.toFixed(2) + '%' : 'N/A')
+                    .removeClass('bullish bearish')
+                    .addClass(market_data.volume_change_24h >= 0 ? 'bullish' : 'bearish');
+                $('#quote-volume').text(market_data.quote_volume ? (market_data.quote_volume / 1000000).toFixed(2) + 'M' : 'N/A');
+
+                // 更新技术指标
+                const rsiText = market_data.rsi ? 
+                    `1D: ${market_data.rsi['1d'] || 'N/A'}, 4H: ${market_data.rsi['4h'] || 'N/A'}, 1H: ${market_data.rsi['1h'] || 'N/A'}` : 
+                    'N/A';
+                $('#rsi-value').text(rsiText);
+
+                const macdText = market_data.macd ? 
+                    `1D: ${formatMacd(market_data.macd['1d'])}, 4H: ${formatMacd(market_data.macd['4h'])}, 1H: ${formatMacd(market_data.macd['1h'])}` : 
+                    'N/A';
+                $('#macd-value').text(macdText);
+
+                const bpText = market_data.bollinger_position ? 
+                    `1D: ${formatNumber(market_data.bollinger_position['1d'])}%, 4H: ${formatNumber(market_data.bollinger_position['4h'])}%, 1H: ${formatNumber(market_data.bollinger_position['1h'])}%` : 
+                    'N/A';
+                $('#bollinger-value').text(bpText);
+                
+                // 更新最后刷新时间
+                updateLastRefreshTime();
+            }
         });
     </script>
 </body>
