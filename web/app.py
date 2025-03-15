@@ -7,6 +7,8 @@ import logging
 import numpy as np
 from typing import List, Union
 import asyncio
+import time
+from datetime import datetime
 # from services.trader.trading_system import TradingSystem
 
 # 添加项目根目录到 Python 路径
@@ -17,6 +19,7 @@ from models.gpt_model import GPTModel
 from models.base_model import BaseModel
 from config.settings import MODEL_CONFIG
 from dotenv import load_dotenv
+from utils.data_saver import DataSaver
 
 # 加载环境变量
 load_dotenv()
@@ -43,6 +46,7 @@ if not logger.handlers:
     
 app = Flask(__name__)
 CORS(app)
+
 
 # 初始化币安客户端
 from binance.client import Client
@@ -365,6 +369,10 @@ def get_balance():
 @app.route('/api/market_analysis', methods=['GET'])
 def get_market_analysis():
     try:
+        # 记录请求开始时间
+        start_time = time.time()
+        request_timestamp = datetime.utcnow()
+        
         # 获取市场数据
         ticker = binance_client.get_symbol_ticker(symbol="BTCUSDT")
         
@@ -391,86 +399,129 @@ def get_market_analysis():
         logger.debug(f"获取到 {len(klines_4h)} 根4小时线数据")
         logger.debug(f"获取到 {len(klines_1h)} 根小时线数据")
         
-        if len(klines_1d) < 26:  # MACD需要26天数据
-            logger.warning(f"日线数据不足，当前只有 {len(klines_1d)} 根K线")
+        # 获取数据库会话并创建数据保存器
+        db = get_db()
+        data_saver = DataSaver(db)
+        
+        try:
+            # 保存K线数据
+            data_saver.save_all_klines(
+                klines_1d=klines_1d,
+                klines_4h=klines_4h,
+                klines_1h=klines_1h,
+                symbol='BTCUSDT'
+            )
             
-        depth = binance_client.get_order_book(symbol='BTCUSDT')
-        
-        # 获取24小时统计数据
-        ticker_24h = binance_client.get_ticker(symbol='BTCUSDT')
-        
-        # 计算多个时间维度的技术指标
-        rsi_values = {
-            '1d': calculate_rsi(klines_1d),
-            '4h': calculate_rsi(klines_4h),
-            '1h': calculate_rsi(klines_1h)
-        }
-        
-        macd_values = {
-            '1d': calculate_macd(klines_1d),
-            '4h': calculate_macd(klines_4h),
-            '1h': calculate_macd(klines_1h)
-        }
-        
-        bollinger_values = {
-            '1d': calculate_bollinger_position(klines_1d),
-            '4h': calculate_bollinger_position(klines_4h),
-            '1h': calculate_bollinger_position(klines_1h)
-        }
-        
-        # 计算价格趋势
-        price_trends = calculate_price_trends(klines_1d, klines_4h, klines_1h)
-        
-        logger.info(f"技术指标计算结果 - RSI: {rsi_values}, MACD: {macd_values}, 布林带位置: {bollinger_values}")
-        logger.info(f"价格趋势分析: {price_trends}")
-        
-        # 计算24小时成交量变化
-        current_volume = float(ticker_24h['volume'])
-        previous_volume = float(klines_1d[-2][5]) if len(klines_1d) >= 2 else current_volume
-        
-        # 计算成交量变化百分比
-        volume_change_24h = ((current_volume - previous_volume) / previous_volume * 100) if previous_volume > 0 else 0
-        
-        # 计算7天平均成交量和当前成交量的对比
-        avg_volume_7d = sum(float(k[5]) for k in klines_1d[-7:]) / 7 if len(klines_1d) >= 7 else current_volume
-        volume_vs_avg = ((current_volume - avg_volume_7d) / avg_volume_7d * 100) if avg_volume_7d > 0 else 0
-        
-        logger.info(f"成交量分析 - 当前: {current_volume:.2f}, 24h变化: {volume_change_24h:.2f}%, 7日均量对比: {volume_vs_avg:.2f}%")
-        
-        market_data = {
-            'symbol': 'BTCUSDT',
-            'price': float(ticker['price']),
-            'price_change_24h': float(ticker_24h['priceChangePercent']),
-            'volume_24h': current_volume,
-            'quote_volume': float(ticker_24h['quoteVolume']),
-            'base_volume': current_volume,
-            'volume_change_24h': round(volume_change_24h, 2),
-            'volume_vs_7d_avg': round(volume_vs_avg, 2),
-            'buy_volume': sum(float(bid[1]) for bid in depth['bids'][:10]),
-            'sell_volume': sum(float(ask[1]) for ask in depth['asks'][:10]),
-            'buy_depth': depth['bids'][:5],
-            'sell_depth': depth['asks'][:5],
-            'rsi': rsi_values,
-            'macd': macd_values,
-            'bollinger_position': bollinger_values,
-            'price_trends': price_trends
-        }
-        
-        # 使用 GPT 模型分析市场
-        analysis_result = run_async(gpt_model.analyze_market(market_data))
-        
-        # 生成交易策略
-        strategy = run_async(gpt_model.generate_strategy(analysis_result))
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'market_data': market_data,
-                'analysis': analysis_result,
-                'strategy': strategy
+            if len(klines_1d) < 26:  # MACD需要26天数据
+                logger.warning(f"日线数据不足，当前只有 {len(klines_1d)} 根K线")
+                
+            depth = binance_client.get_order_book(symbol='BTCUSDT')
+            
+            # 获取24小时统计数据
+            ticker_24h = binance_client.get_ticker(symbol='BTCUSDT')
+            
+            # 计算多个时间维度的技术指标
+            rsi_values = {
+                '1d': calculate_rsi(klines_1d),
+                '4h': calculate_rsi(klines_4h),
+                '1h': calculate_rsi(klines_1h)
             }
-        })
+            
+            macd_values = {
+                '1d': calculate_macd(klines_1d),
+                '4h': calculate_macd(klines_4h),
+                '1h': calculate_macd(klines_1h)
+            }
+            
+            bollinger_values = {
+                '1d': calculate_bollinger_position(klines_1d),
+                '4h': calculate_bollinger_position(klines_4h),
+                '1h': calculate_bollinger_position(klines_1h)
+            }
+            
+            # 计算价格趋势
+            price_trends = calculate_price_trends(klines_1d, klines_4h, klines_1h)
+            
+            logger.info(f"技术指标计算结果 - RSI: {rsi_values}, MACD: {macd_values}, 布林带位置: {bollinger_values}")
+            logger.info(f"价格趋势分析: {price_trends}")
+            
+            # 计算24小时成交量变化
+            current_volume = float(ticker_24h['volume'])
+            previous_volume = float(klines_1d[-2][5]) if len(klines_1d) >= 2 else current_volume
+            
+            # 计算成交量变化百分比
+            volume_change_24h = ((current_volume - previous_volume) / previous_volume * 100) if previous_volume > 0 else 0
+            
+            # 计算7天平均成交量和当前成交量的对比
+            avg_volume_7d = sum(float(k[5]) for k in klines_1d[-7:]) / 7 if len(klines_1d) >= 7 else current_volume
+            volume_vs_avg = ((current_volume - avg_volume_7d) / avg_volume_7d * 100) if avg_volume_7d > 0 else 0
+            
+            logger.info(f"成交量分析 - 当前: {current_volume:.2f}, 24h变化: {volume_change_24h:.2f}%, 7日均量对比: {volume_vs_avg:.2f}%")
+            
+            market_data = {
+                'symbol': 'BTCUSDT',
+                'price': float(ticker['price']),
+                'price_change_24h': float(ticker_24h['priceChangePercent']),
+                'volume_24h': current_volume,
+                'quote_volume': float(ticker_24h['quoteVolume']),
+                'base_volume': current_volume,
+                'volume_change_24h': round(volume_change_24h, 2),
+                'volume_vs_7d_avg': round(volume_vs_avg, 2),
+                'buy_volume': sum(float(bid[1]) for bid in depth['bids'][:10]),
+                'sell_volume': sum(float(ask[1]) for ask in depth['asks'][:10]),
+                'buy_depth': depth['bids'][:5],
+                'sell_depth': depth['asks'][:5],
+                'rsi': rsi_values,
+                'macd': macd_values,
+                'bollinger_position': bollinger_values,
+                'price_trends': price_trends
+            }
+            
+            # 使用 GPT 模型分析市场
+            analysis_result = run_async(gpt_model.analyze_market(market_data))
+            
+            # 生成交易策略
+            strategy = run_async(gpt_model.generate_strategy(analysis_result))
+            
+            # 计算响应时间
+            response_time = (time.time() - start_time) * 1000  # 转换为毫秒
+            
+            # 保存市场分析数据
+            market_analysis = data_saver.save_market_analysis(
+                symbol='BTCUSDT',
+                price=float(ticker['price']),
+                price_change_24h=float(ticker_24h['priceChangePercent']),
+                volume_24h=current_volume,
+                quote_volume=float(ticker_24h['quoteVolume']),
+                volume_change_24h=round(volume_change_24h, 2),
+                volume_vs_7d_avg=round(volume_vs_avg, 2),
+                rsi_data=rsi_values,
+                macd_data=macd_values,
+                bollinger_data=bollinger_values,
+                price_trends=price_trends,
+                analysis_result=analysis_result,
+                strategy=strategy,
+                request_ip=request.remote_addr,
+                request_timestamp=request_timestamp,
+                response_time=response_time
+            )
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'market_data': market_data,
+                    'analysis': analysis_result,
+                    'strategy': strategy
+                }
+            })
+            
+        except Exception as db_error:
+            db.rollback()
+            logger.error(f"保存数据失败: {str(db_error)}")
+            raise
+            
     except Exception as e:
+        logger.error(f"市场分析失败: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
